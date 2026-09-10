@@ -1,0 +1,52 @@
+name: Pipeline tests
+'on':
+  push:
+    branches:
+    - main
+  pull_request: {}
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+    - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+      with:
+        node-version: '24.19.0'
+        package-manager-cache: false
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        persist-credentials: false
+    - name: Install locked development dependencies
+      run: npm ci --ignore-scripts
+    - name: Types, committed bundles, protocol, integrity, recovery, and workflow tests
+      run: npm run verify
+  cargo-fixture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+    - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+      with:
+        node-version: '24.19.0'
+        package-manager-cache: false
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        persist-credentials: false
+        fetch-depth: 0
+    - name: Install test toolchain
+      run: rustup toolchain install 1.88.0 --profile minimal
+    - name: Install fixture dependencies
+      run: npm ci --ignore-scripts
+    - name: Qualify single-crate and workspace release trains
+      run: |-
+        npm run test:cargo -- --out .local/qualification/single
+        npm run test:workspace -- --out .local/qualification/workspace
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      id: artifact
+      with:
+        name: cargo-qualification-${{ github.run_id }}-${{ github.run_attempt }}
+        path: .local/qualification
+        if-no-files-found: error
+        retention-days: 90

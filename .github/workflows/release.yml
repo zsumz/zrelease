@@ -1,0 +1,531 @@
+# Reusable release pipeline. Rehearsal is the default.
+name: zrelease
+'on':
+  workflow_call:
+    inputs:
+      package:
+        type: string
+        required: true
+        description: Exactly one publishable library workspace member.
+      plan-artifact-id:
+        type: string
+        required: true
+      plan-sha256:
+        type: string
+        required: true
+      approval-artifact-id:
+        type: string
+        default: ''
+      dependency-artifact-ids:
+        type: string
+        default: ''
+      dependency-shas:
+        type: string
+        default: '[]'
+      pipeline-ref:
+        type: string
+        required: true
+        description: Full commit SHA of zsumz/zrelease. Must equal the workflow uses pin.
+      toolchain:
+        type: string
+        required: true
+        description: Exact stable Rust version, for example 1.88.0. No floating stable/nightly.
+      publish:
+        type: boolean
+        default: false
+        description: False rehearses against a loopback registry; true performs an irreversible crates.io publish.
+      manifest-path:
+        type: string
+        default: Cargo.toml
+      base-branch:
+        type: string
+        default: main
+        description: Require the source commit to be an ancestor of this remote branch.
+      tag-prefix:
+        type: string
+        default: v
+      smoke-source:
+        type: string
+        default: ''
+        description: Optional checked-in Rust main.rs using the dependency alias subject.
+      features:
+        type: string
+        default: '[]'
+        description: JSON array of features, shared by qualification and the cold consumer.
+      default-features:
+        type: boolean
+        default: true
+    outputs:
+      candidate-artifact-id:
+        description: Immutable candidate artifact for downstream rehearsal.
+        value: ${{ jobs.qualify.outputs.artifact-id }}
+      candidate-sha256:
+        description: SHA-256 of candidate.json
+        value: ${{ jobs.qualify.outputs.candidate-sha }}
+      deployment-id:
+        description: Logical package deployment ID
+        value: ${{ jobs.track.outputs.deployment-id }}
+      phase:
+        description: Final delivery phase
+        value: ${{ jobs.finalize.outputs.phase }}
+permissions:
+  contents: read
+concurrency:
+  group: zrelease-${{ github.repository }}-${{ inputs.package }}
+  cancel-in-progress: false
+env:
+  PIPELINE_REF: ${{ inputs.pipeline-ref }}
+  PACKAGE: ${{ inputs.package }}
+  TOOLCHAIN: ${{ inputs.toolchain }}
+  CARGO_TERM_COLOR: never
+  PLAN_SHA: ${{ inputs.plan-sha256 }}
+defaults:
+  run:
+    shell: bash
+jobs:
+  qualify:
+    name: Qualify the exact packaged library
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      candidate-sha: ${{ steps.prepare.outputs.candidate_sha256 }}
+      crate-sha: ${{ steps.prepare.outputs.crate_sha256 }}
+      version: ${{ steps.prepare.outputs.version }}
+      artifact-id: ${{ steps.artifact.outputs.artifact-id }}
+    steps:
+    - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+      with:
+        node-version: '24.19.0'
+        package-manager-cache: false
+    - name: Require immutable pipeline pin
+      run: |-
+        [[ "$PIPELINE_REF" =~ ^[0-9a-f]{40}$ ]] || { echo "pipeline-ref must be a full commit SHA" >&2; exit 1; }
+        [[ "$TOOLCHAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      name: Checkout pinned pipeline (not the caller)
+      with:
+        repository: zsumz/zrelease
+        ref: ${{ inputs.pipeline-ref }}
+        path: .pipeline
+        persist-credentials: false
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      name: Checkout the triggering source commit
+      with:
+        ref: ${{ github.sha }}
+        path: .source
+        fetch-depth: 0
+        persist-credentials: false
+    - name: Install the selected toolchain
+      run: rustup toolchain install "$TOOLCHAIN" --profile minimal
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      name: Download the approved release plan
+      with:
+        artifact-ids: ${{ inputs.plan-artifact-id }}
+        path: ${{ runner.temp }}/plan
+        merge-multiple: true
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      name: Download dependency candidates by immutable ID
+      if: inputs.dependency-artifact-ids != ''
+      with:
+        artifact-ids: ${{ inputs.dependency-artifact-ids }}
+        path: ${{ runner.temp }}/dependencies
+        merge-multiple: false
+    - name: Test source, package, test archive, seal candidate
+      run: |-
+        flags=()
+        [[ "$PUBLISH" == true ]] && flags+=(--publishing)
+        [[ "$DEFAULT_FEATURES" == false ]] && flags+=(--no-default-features)
+        [[ -n "$DEPENDENCY_IDS" ]] && flags+=(--dependencies "$RUNNER_TEMP/dependencies" --dependency-shas "$DEPENDENCY_SHAS")
+        node .pipeline/dist/zrelease.mjs prepare \
+          --source .source --manifest "$MANIFEST" --package "$PACKAGE" \
+          --toolchain "$TOOLCHAIN" --repository "$GITHUB_REPOSITORY" \
+          --commit "$GITHUB_SHA" --ref "$GITHUB_REF" --pipeline-ref "$PIPELINE_REF" \
+          --out "$RUNNER_TEMP/capsule" --tag-prefix "$TAG_PREFIX" \
+          --base-branch "$BASE_BRANCH" --smoke "$SMOKE" --features-json "$FEATURES" "${flags[@]}" \
+          --plan "$RUNNER_TEMP/plan/release-plan.json" --plan-sha "$PLAN_SHA"
+      id: prepare
+      env:
+        PUBLISH: ${{ inputs.publish }}
+        DEFAULT_FEATURES: ${{ inputs.default-features }}
+        MANIFEST: ${{ inputs.manifest-path }}
+        TAG_PREFIX: ${{ inputs.tag-prefix }}
+        BASE_BRANCH: ${{ inputs.base-branch }}
+        SMOKE: ${{ inputs.smoke-source }}
+        FEATURES: ${{ inputs.features }}
+        DEPENDENCY_IDS: ${{ inputs.dependency-artifact-ids }}
+        DEPENDENCY_SHAS: ${{ inputs.dependency-shas }}
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      id: artifact
+      with:
+        name: candidate-${{ inputs.package }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/capsule
+        if-no-files-found: error
+        retention-days: 90
+  attest:
+    name: Attest candidate without running package code
+    needs:
+    - qualify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      CANDIDATE_SHA: ${{ needs.qualify.outputs.candidate-sha }}
+    outputs:
+      artifact-id: ${{ steps.artifact.outputs.artifact-id }}
+    steps:
+    - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+      with:
+        node-version: '24.19.0'
+        package-manager-cache: false
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      name: Checkout pinned pipeline (not the caller)
+      with:
+        repository: zsumz/zrelease
+        ref: ${{ inputs.pipeline-ref }}
+        path: .pipeline
+        persist-credentials: false
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      name: Download candidate by immutable artifact ID
+      with:
+        artifact-ids: ${{ needs.qualify.outputs.artifact-id }}
+        path: ${{ runner.temp }}/capsule
+        merge-multiple: true
+    - name: Verify candidate source and digest bindings
+      run: node .pipeline/dist/zrelease.mjs check --capsule "$RUNNER_TEMP/capsule" --candidate-sha "$CANDIDATE_SHA"
+        --package "$PACKAGE"
+    - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+      id: provenance
+      with:
+        subject-path: ${{ runner.temp }}/capsule/*
+    - name: Preserve the verification bundle
+      run: |-
+        mkdir -p "$RUNNER_TEMP/attestation"
+        cp "$BUNDLE" "$RUNNER_TEMP/attestation/bundle.jsonl"
+      env:
+        BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      id: artifact
+      with:
+        name: attestation-${{ inputs.package }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/attestation
+        if-no-files-found: error
+        retention-days: 90
+  track:
+    name: Open package deployment
+    needs:
+    - qualify
+    - attest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: write
+    env:
+      CANDIDATE_SHA: ${{ needs.qualify.outputs.candidate-sha }}
+    outputs:
+      deployment-id: ${{ steps.begin.outputs.deployment_id }}
+    steps:
+    - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+      with:
+        node-version: '24.19.0'
+        package-manager-cache: false
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      name: Checkout pinned pipeline (not the caller)
+      with:
+        repository: zsumz/zrelease
+        ref: ${{ inputs.pipeline-ref }}
+        path: .pipeline
+        persist-credentials: false
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      name: Download candidate by immutable artifact ID
+      with:
+        artifact-ids: ${{ needs.qualify.outputs.artifact-id }}
+        path: ${{ runner.temp }}/capsule
+        merge-multiple: true
+    - name: Start a deployment covering the entire delivery
+      run: |-
+        flags=()
+        [[ "$PUBLISH" == true ]] && flags+=(--production)
+        node .pipeline/dist/zrelease.mjs begin --capsule "$RUNNER_TEMP/capsule" --candidate-sha "$CANDIDATE_SHA" --package "$PACKAGE" --run-url "$RUN_URL" "${flags[@]}"
+      id: begin
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        PUBLISH: ${{ inputs.publish }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  publish:
+    name: Authorize and upload sealed bytes
+    needs:
+    - qualify
+    - attest
+    - track
+    if: inputs.publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: crates.io
+      deployment: false
+    permissions:
+      contents: read
+      attestations: read
+      id-token: write
+    env:
+      CANDIDATE_SHA: ${{ needs.qualify.outputs.candidate-sha }}
+    outputs:
+      artifact-id: ${{ steps.artifact.outputs.artifact-id }}
+    steps:
+    - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+      with:
+        node-version: '24.19.0'
+        package-manager-cache: false
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      name: Checkout pinned pipeline (not the caller)
+      with:
+        repository: zsumz/zrelease
+        ref: ${{ inputs.pipeline-ref }}
+        path: .pipeline
+        persist-credentials: false
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      name: Download candidate by immutable artifact ID
+      with:
+        artifact-ids: ${{ needs.qualify.outputs.artifact-id }}
+        path: ${{ runner.temp }}/capsule
+        merge-multiple: true
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      name: Download signing bundle
+      with:
+        artifact-ids: ${{ needs.attest.outputs.artifact-id }}
+        path: ${{ runner.temp }}/attestation
+        merge-multiple: true
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      name: Download the approved release plan
+      with:
+        artifact-ids: ${{ inputs.plan-artifact-id }}
+        path: ${{ runner.temp }}/plan
+        merge-multiple: true
+    - name: Verify candidate before requesting registry credentials
+      run: node .pipeline/dist/zrelease.mjs check --capsule "$RUNNER_TEMP/capsule" --candidate-sha "$CANDIDATE_SHA"
+        --package "$PACKAGE" --plan "$RUNNER_TEMP/plan/release-plan.json" --plan-sha "$PLAN_SHA"
+    - name: Require signed release approval
+      run: '[[ "$APPROVAL_ID" =~ ^[1-9][0-9]*$ ]]'
+      env:
+        APPROVAL_ID: ${{ inputs.approval-artifact-id }}
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      name: Download signed release approval
+      with:
+        artifact-ids: ${{ inputs.approval-artifact-id }}
+        path: ${{ runner.temp }}/approval
+        merge-multiple: true
+    - name: Verify approval of this exact release plan
+      run: |-
+        gh attestation verify "$RUNNER_TEMP/plan/release-plan.json" \
+          --bundle "$RUNNER_TEMP/approval/bundle.jsonl" \
+          --repo "$GITHUB_REPOSITORY" \
+          --signer-workflow zsumz/zrelease/.github/workflows/plan.yml \
+          --signer-digest "$PIPELINE_REF" --source-digest "$GITHUB_SHA" \
+          --source-ref "$GITHUB_REF" --deny-self-hosted-runners
+      env:
+        GH_TOKEN: ${{ github.token }}
+    - name: Verify signer, source revision, tag, and artifact signature
+      run: |-
+        gh attestation verify "$RUNNER_TEMP/capsule/candidate.json" \
+          --bundle "$RUNNER_TEMP/attestation/bundle.jsonl" \
+          --repo "$GITHUB_REPOSITORY" \
+          --signer-workflow zsumz/zrelease/.github/workflows/release.yml \
+          --signer-digest "$PIPELINE_REF" --source-digest "$GITHUB_SHA" \
+          --source-ref "$GITHUB_REF" --deny-self-hosted-runners
+      env:
+        GH_TOKEN: ${{ github.token }}
+    - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18
+      id: auth
+      name: Exchange OIDC for a short-lived crates.io token
+    - name: Publish exact archive; reconcile ambiguous responses
+      run: node .pipeline/dist/zrelease.mjs upload --capsule "$RUNNER_TEMP/capsule" --candidate-sha "$CANDIDATE_SHA"
+        --package "$PACKAGE" --confirm-publish --tag-prefix "$TAG_PREFIX" --out "$RUNNER_TEMP/report/registry.json"
+        --plan "$RUNNER_TEMP/plan/release-plan.json" --plan-sha "$PLAN_SHA"
+      env:
+        CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        TAG_PREFIX: ${{ inputs.tag-prefix }}
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      id: artifact
+      with:
+        name: registry-${{ inputs.package }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/report
+        if-no-files-found: error
+        retention-days: 90
+  verify:
+    name: Cold consumer (no publish identity)
+    needs:
+    - qualify
+    - publish
+    if: inputs.publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      CANDIDATE_SHA: ${{ needs.qualify.outputs.candidate-sha }}
+    outputs:
+      artifact-id: ${{ steps.artifact.outputs.artifact-id }}
+    steps:
+    - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+      with:
+        node-version: '24.19.0'
+        package-manager-cache: false
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      name: Checkout pinned pipeline (not the caller)
+      with:
+        repository: zsumz/zrelease
+        ref: ${{ inputs.pipeline-ref }}
+        path: .pipeline
+        persist-credentials: false
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      name: Download candidate by immutable artifact ID
+      with:
+        artifact-ids: ${{ needs.qualify.outputs.artifact-id }}
+        path: ${{ runner.temp }}/capsule
+        merge-multiple: true
+    - name: Install pinned Rust
+      run: rustup toolchain install "$TOOLCHAIN" --profile minimal
+    - name: Resolve exact version from crates.io; build, test, run
+      run: node .pipeline/dist/zrelease.mjs consumer --capsule "$RUNNER_TEMP/capsule" --candidate-sha "$CANDIDATE_SHA"
+        --package "$PACKAGE" --out "$RUNNER_TEMP/report"
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      id: artifact
+      with:
+        name: consumer-${{ inputs.package }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/report
+        if-no-files-found: error
+        retention-days: 90
+  rehearse:
+    name: Rehearse against a loopback registry
+    needs:
+    - qualify
+    - track
+    if: '!inputs.publish'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      CANDIDATE_SHA: ${{ needs.qualify.outputs.candidate-sha }}
+    outputs:
+      artifact-id: ${{ steps.artifact.outputs.artifact-id }}
+    steps:
+    - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+      with:
+        node-version: '24.19.0'
+        package-manager-cache: false
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      name: Checkout pinned pipeline (not the caller)
+      with:
+        repository: zsumz/zrelease
+        ref: ${{ inputs.pipeline-ref }}
+        path: .pipeline
+        persist-credentials: false
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      name: Download candidate by immutable artifact ID
+      with:
+        artifact-ids: ${{ needs.qualify.outputs.artifact-id }}
+        path: ${{ runner.temp }}/capsule
+        merge-multiple: true
+    - name: Upload, lose acknowledgement, retry without double publish
+      run: node .pipeline/dist/zrelease.mjs rehearse --capsule "$RUNNER_TEMP/capsule" --candidate-sha "$CANDIDATE_SHA"
+        --package "$PACKAGE" --out "$RUNNER_TEMP/report/rehearsal.json"
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      id: artifact
+      with:
+        name: rehearsal-${{ inputs.package }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/report
+        if-no-files-found: error
+        retention-days: 90
+  finalize:
+    name: Record delivery outcome and receipt
+    needs:
+    - qualify
+    - track
+    - publish
+    - verify
+    - rehearse
+    if: always() && needs.track.outputs.deployment-id != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: write
+    env:
+      CANDIDATE_SHA: ${{ needs.qualify.outputs.candidate-sha }}
+    outputs:
+      phase: ${{ steps.finish.outputs.phase }}
+    steps:
+    - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+      with:
+        node-version: '24.19.0'
+        package-manager-cache: false
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      name: Checkout pinned pipeline (not the caller)
+      with:
+        repository: zsumz/zrelease
+        ref: ${{ inputs.pipeline-ref }}
+        path: .pipeline
+        persist-credentials: false
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      name: Download candidate by immutable artifact ID
+      with:
+        artifact-ids: ${{ needs.qualify.outputs.artifact-id }}
+        path: ${{ runner.temp }}/capsule
+        merge-multiple: true
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      name: Collect publish report
+      if: needs.publish.outputs.artifact-id != ''
+      with:
+        artifact-ids: ${{ needs.publish.outputs.artifact-id }}
+        path: ${{ runner.temp }}/reports
+        merge-multiple: true
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      name: Collect verify report
+      if: needs.verify.outputs.artifact-id != ''
+      with:
+        artifact-ids: ${{ needs.verify.outputs.artifact-id }}
+        path: ${{ runner.temp }}/reports
+        merge-multiple: true
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      name: Collect rehearse report
+      if: needs.rehearse.outputs.artifact-id != ''
+      with:
+        artifact-ids: ${{ needs.rehearse.outputs.artifact-id }}
+        path: ${{ runner.temp }}/reports
+        merge-multiple: true
+    - name: Close deployment; never imply rollback
+      if: always()
+      run: |-
+        flags=()
+        [[ "$PUBLISH" == true ]] && flags+=(--production)
+        node .pipeline/dist/zrelease.mjs finish --capsule "$RUNNER_TEMP/capsule" --candidate-sha "$CANDIDATE_SHA" --package "$PACKAGE" \
+          --deployment-id "$DEPLOYMENT_ID" --run-url "$RUN_URL" \
+          --results-json "$RESULTS" --reports "$RUNNER_TEMP/reports" \
+          --out "$RUNNER_TEMP/receipt/release.json" "${flags[@]}"
+      id: finish
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        PUBLISH: ${{ inputs.publish }}
+        DEPLOYMENT_ID: ${{ needs.track.outputs.deployment-id }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        RESULTS: ${{ toJSON(needs) }}
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      id: artifact
+      with:
+        name: receipt-${{ inputs.package }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/receipt
+        if-no-files-found: error
+        retention-days: 90
+      if: always()
+    - name: Require a successful delivery outcome
+      run: '[[ "$STATE" == success ]]'
+      env:
+        STATE: ${{ steps.finish.outputs.deployment_status }}

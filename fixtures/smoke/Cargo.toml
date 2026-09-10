@@ -1,0 +1,12 @@
+[package]
+name = "zrelease-fixture-do-not-publish"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.88"
+license = "MIT"
+description = "Local fixture for zsumz/zrelease. Do not publish this package."
+readme = "README.md"
+
+[features]
+default = []
+extra = []

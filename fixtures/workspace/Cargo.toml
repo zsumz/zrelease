@@ -1,0 +1,9 @@
+[workspace]
+members = ["base", "sync", "facade", "alias", "private"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.88"
+license = "MIT"
+description = "Local zrelease workspace fixture. Do not publish."

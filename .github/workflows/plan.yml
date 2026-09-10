@@ -1,0 +1,165 @@
+name: Plan and approve release
+'on':
+  workflow_call:
+    inputs:
+      members:
+        type: string
+        required: true
+        description: Generated crate names and dependency graph.
+      workspace:
+        type: boolean
+        default: false
+      pipeline-ref:
+        type: string
+        required: true
+      toolchain:
+        type: string
+        required: true
+      manifest-path:
+        type: string
+        default: Cargo.toml
+      publish:
+        type: boolean
+        default: false
+      base-branch:
+        type: string
+        default: main
+      tag-prefix:
+        type: string
+        default: v
+    outputs:
+      artifact-id:
+        value: ${{ jobs.ready.outputs.artifact-id }}
+      plan-sha256:
+        value: ${{ jobs.ready.outputs.plan-sha256 }}
+      approval-artifact-id:
+        value: ${{ jobs.ready.outputs.approval-artifact-id }}
+permissions:
+  contents: read
+jobs:
+  plan:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      artifact-id: ${{ steps.artifact.outputs.artifact-id }}
+      plan-sha256: ${{ steps.plan.outputs.plan_sha256 }}
+    steps:
+    - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+      with:
+        node-version: '24.19.0'
+        package-manager-cache: false
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        repository: zsumz/zrelease
+        ref: ${{ inputs.pipeline-ref }}
+        path: .pipeline
+        persist-credentials: false
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: ${{ github.sha }}
+        path: .source
+        fetch-depth: 0
+        persist-credentials: false
+    - name: Validate and record the release
+      id: plan
+      shell: bash
+      run: |-
+        [[ "$PIPELINE_REF" =~ ^[0-9a-f]{40}$ ]] || exit 1
+        [[ "$TOOLCHAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+        rustup toolchain install "$TOOLCHAIN" --profile minimal
+        flags=()
+        [[ "$PUBLISH" == true ]] && flags+=(--publishing)
+        [[ "$WORKSPACE" == true ]] && flags+=(--workspace)
+        node .pipeline/dist/zrelease.mjs plan --source .source --manifest "$MANIFEST" \
+          --members-json "$MEMBERS" --toolchain "$TOOLCHAIN" --repository "$GITHUB_REPOSITORY" \
+          --commit "$GITHUB_SHA" --ref "$GITHUB_REF" --pipeline-ref "$PIPELINE_REF" \
+          --base-branch "$BASE_BRANCH" --tag-prefix "$TAG_PREFIX" --out "$RUNNER_TEMP/plan/release-plan.json" "${flags[@]}"
+      env:
+        PIPELINE_REF: ${{ inputs.pipeline-ref }}
+        TOOLCHAIN: ${{ inputs.toolchain }}
+        MEMBERS: ${{ inputs.members }}
+        WORKSPACE: ${{ inputs.workspace }}
+        MANIFEST: ${{ inputs.manifest-path }}
+        PUBLISH: ${{ inputs.publish }}
+        BASE_BRANCH: ${{ inputs.base-branch }}
+        TAG_PREFIX: ${{ inputs.tag-prefix }}
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      id: artifact
+      with:
+        name: release-plan-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/plan
+        if-no-files-found: error
+        retention-days: 90
+  approve:
+    name: Approve the entire release
+    needs: [plan]
+    if: inputs.publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: release
+      deployment: false
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    outputs:
+      artifact-id: ${{ steps.artifact.outputs.artifact-id }}
+    steps:
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      with:
+        artifact-ids: ${{ needs.plan.outputs.artifact-id }}
+        path: ${{ runner.temp }}/plan
+        merge-multiple: true
+    - name: Check the approved plan digest
+      shell: bash
+      run: |-
+        [[ "$PLAN_SHA" =~ ^[0-9a-f]{64}$ ]] || exit 1
+        actual=$(sha256sum "$RUNNER_TEMP/plan/release-plan.json")
+        [[ "${actual%% *}" == "$PLAN_SHA" ]] || exit 1
+      env:
+        PLAN_SHA: ${{ needs.plan.outputs.plan-sha256 }}
+    - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+      id: approval
+      with:
+        subject-path: ${{ runner.temp }}/plan/release-plan.json
+    - name: Preserve signed approval evidence
+      shell: bash
+      run: |-
+        mkdir -p "$RUNNER_TEMP/approval"
+        cp "$BUNDLE" "$RUNNER_TEMP/approval/bundle.jsonl"
+      env:
+        BUNDLE: ${{ steps.approval.outputs.bundle-path }}
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      id: artifact
+      with:
+        name: release-approval-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/approval
+        if-no-files-found: error
+        retention-days: 90
+  ready:
+    name: Require the planned release to be authorized
+    needs: [plan, approve]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      artifact-id: ${{ needs.plan.outputs.artifact-id }}
+      plan-sha256: ${{ needs.plan.outputs.plan-sha256 }}
+      approval-artifact-id: ${{ needs.approve.outputs.artifact-id }}
+    steps:
+    - name: Enforce approval for publishing; allow rehearsal without it
+      shell: bash
+      run: |-
+        [[ "$PLAN_RESULT" == success ]] || exit 1
+        if [[ "$PUBLISH" == true ]]; then
+          [[ "$APPROVAL_RESULT" == success ]] || exit 1
+        else
+          [[ "$APPROVAL_RESULT" == skipped ]] || exit 1
+        fi
+      env:
+        PUBLISH: ${{ inputs.publish }}
+        PLAN_RESULT: ${{ needs.plan.result }}
+        APPROVAL_RESULT: ${{ needs.approve.result }}
