@@ -2,7 +2,11 @@
 
 Rust library releases for GitHub Actions. One approval for a crate or workspace. Publish and verify in dependency order; stop on failure.
 
-Experimental. Hosted publishing is untested. Linux only.
+Experimental. Linux only. A [four-crate RC publication](https://github.com/zsumz/vthread/actions/runs/34615332556)
+has exercised the single approval gate, OIDC authentication, registry uploads,
+and fresh registry-only consumers. That run used pipeline revision
+`1993b45bfae19a00e61a9138565b79e029c2d7f4`; its plan, candidate attestations,
+registry bytes, consumer lockfiles, and delivery receipts were verified.
 
 ## Setup
 
