@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { load } from '../src/capsule.ts';
@@ -18,6 +18,21 @@ test('dependency artifacts require the expected digest and source context', asyn
   await assert.rejects(loadDependencies(root, [sha], { commit: 'c'.repeat(40) }), /binding/);
   writeFileSync(join(path, 'package.crate'), 'tampered');
   await assert.rejects(loadDependencies(root, [sha], {}), /digest/);
+});
+test('a single dependency extracted directly into its destination retains integrity checks', async t => {
+  const root = temp(t), { sha, candidate } = await makeCapsule(root);
+  assert.equal((await loadDependencies(root, [sha], { commit: candidate.source.commit }))[0]!.candidate.package.name, 'example-lib');
+  await assert.rejects(loadDependencies(root, ['0'.repeat(64)], {}), /digest/);
+  await assert.rejects(loadDependencies(root, [sha, '0'.repeat(64)], {}), /release graph/);
+  await assert.rejects(loadDependencies(root, [sha], { commit: 'c'.repeat(40) }), /binding/);
+  writeFileSync(join(root, 'package.crate'), 'tampered');
+  await assert.rejects(loadDependencies(root, [sha], {}), /digest/);
+});
+for (const extra of ['file', 'directory']) test(`a flat dependency rejects an unexpected ${extra}`, async t => {
+  const root = temp(t), { sha } = await makeCapsule(root);
+  if (extra === 'file') writeFileSync(join(root, 'unexpected'), 'extra');
+  else mkdirSync(join(root, 'unexpected'));
+  await assert.rejects(loadDependencies(root, [sha], {}), /release graph/);
 });
 test('index conversion preserves aliases, build dependencies, features and targets', () => {
   const metadata: PublishMetadata = { name: 'facade', vers: '1.0.0', features: { extra: ['dep:engine'] }, deps: [{

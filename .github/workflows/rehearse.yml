@@ -86,7 +86,7 @@ jobs:
           MANIFEST: ${{ inputs.manifest-path }}
           BASE_BRANCH: ${{ inputs.base-branch }}
           SMOKES: ${{ inputs.smoke-sources }}
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         id: artifact
         with:
           name: workspace-candidates-${{ github.run_id }}-${{ github.run_attempt }}
@@ -117,7 +117,7 @@ jobs:
           ref: ${{ inputs.pipeline-ref }}
           path: .pipeline
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           artifact-ids: ${{ needs.package.outputs.artifact-id }}
           path: ${{ runner.temp }}/workspace
@@ -134,7 +134,7 @@ jobs:
           cp "$BUNDLE" "$RUNNER_TEMP/attestation/bundle.jsonl"
         env:
           BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         id: artifact
         with:
           name: workspace-attestation-${{ github.run_id }}-${{ github.run_attempt }}
@@ -163,12 +163,12 @@ jobs:
           ref: ${{ inputs.pipeline-ref }}
           path: .pipeline
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           artifact-ids: ${{ needs.package.outputs.artifact-id }}
           path: ${{ runner.temp }}/workspace
           merge-multiple: true
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           artifact-ids: ${{ needs.attest.outputs.artifact-id }}
           path: ${{ runner.temp }}/attestation
@@ -186,7 +186,7 @@ jobs:
         run: node .pipeline/dist/workspace.mjs rehearse --bundle "$RUNNER_TEMP/workspace" --sha "$WORKSPACE_SHA" --out "$RUNNER_TEMP/receipts" --track
         env:
           GITHUB_TOKEN: ${{ github.token }}
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: workspace-rehearsal-${{ github.run_id }}-${{ github.run_attempt }}

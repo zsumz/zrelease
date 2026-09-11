@@ -11,12 +11,16 @@ import type { PublishMetadata } from './types.ts';
 
 export async function loadDependencies(directory: string, hashes: string[], bindings: Bindings): Promise<Capsule[]> {
   requireThat(new Set(hashes).size === hashes.length, 'duplicate dependency candidate');
-  const dirs = readdirSync(directory, { withFileTypes: true });
-  requireThat(dirs.every(d => d.isDirectory()) && dirs.length === hashes.length, 'dependency artifacts differ from the release graph');
+  const entries = readdirSync(directory, { withFileTypes: true });
+  // Single artifact downloads are flat; multiple artifacts retain one directory each.
+  const flat = entries.every(entry => entry.isFile()) && entries.map(entry => entry.name).sort().join(',') ===
+    'candidate.json,package.crate,publish.json,smoke.rs';
+  const paths = flat ? [directory] : entries.map(entry => join(directory, entry.name));
+  requireThat((flat || entries.every(entry => entry.isDirectory())) && paths.length === hashes.length, 'dependency artifacts differ from the release graph');
   const found = new Set<string>(), names = new Set<string>();
   const result: Capsule[] = [];
-  for (const dir of dirs) {
-    const path = join(directory, dir.name), sha = digest(readRegular(join(path, 'candidate.json'), 4 * 1024 * 1024));
+  for (const path of paths) {
+    const sha = digest(readRegular(join(path, 'candidate.json'), 4 * 1024 * 1024));
     requireThat(hashes.includes(sha) && !found.has(sha), 'unexpected dependency candidate digest');
     const capsule = await load(path, sha, bindings);
     requireThat(!names.has(capsule.candidate.package.name), 'duplicate dependency crate');

@@ -3896,12 +3896,14 @@ import { mkdirSync as mkdirSync5, readdirSync, writeFileSync as writeFileSync4 }
 import { join as join6 } from "node:path";
 async function loadDependencies(directory, hashes, bindings) {
   requireThat(new Set(hashes).size === hashes.length, "duplicate dependency candidate");
-  const dirs = readdirSync(directory, { withFileTypes: true });
-  requireThat(dirs.every((d) => d.isDirectory()) && dirs.length === hashes.length, "dependency artifacts differ from the release graph");
+  const entries = readdirSync(directory, { withFileTypes: true });
+  const flat = entries.every((entry) => entry.isFile()) && entries.map((entry) => entry.name).sort().join(",") === "candidate.json,package.crate,publish.json,smoke.rs";
+  const paths = flat ? [directory] : entries.map((entry) => join6(directory, entry.name));
+  requireThat((flat || entries.every((entry) => entry.isDirectory())) && paths.length === hashes.length, "dependency artifacts differ from the release graph");
   const found = /* @__PURE__ */ new Set(), names = /* @__PURE__ */ new Set();
   const result = [];
-  for (const dir of dirs) {
-    const path = join6(directory, dir.name), sha = digest(readRegular(join6(path, "candidate.json"), 4 * 1024 * 1024));
+  for (const path of paths) {
+    const sha = digest(readRegular(join6(path, "candidate.json"), 4 * 1024 * 1024));
     requireThat(hashes.includes(sha) && !found.has(sha), "unexpected dependency candidate digest");
     const capsule = await load(path, sha, bindings);
     requireThat(!names.has(capsule.candidate.package.name), "duplicate dependency crate");
