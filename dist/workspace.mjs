@@ -1275,8 +1275,8 @@ var require_streamx = __commonJS({
             return this;
           },
           next() {
-            return new Promise(function(resolve4, reject) {
-              promiseResolve = resolve4;
+            return new Promise(function(resolve5, reject) {
+              promiseResolve = resolve5;
               promiseReject = reject;
               const data = stream.read();
               if (data !== null) ondata(data);
@@ -1309,11 +1309,11 @@ var require_streamx = __commonJS({
         }
         function destroy(err) {
           stream.destroy(err);
-          return new Promise((resolve4, reject) => {
-            if (stream._duplexState & DESTROYED) return resolve4({ value: void 0, done: true });
+          return new Promise((resolve5, reject) => {
+            if (stream._duplexState & DESTROYED) return resolve5({ value: void 0, done: true });
             stream.once("close", function() {
               if (err) reject(err);
-              else resolve4({ value: void 0, done: true });
+              else resolve5({ value: void 0, done: true });
             });
           });
         }
@@ -1357,8 +1357,8 @@ var require_streamx = __commonJS({
         const writes = pending + (ws._duplexState & WRITE_WRITING ? 1 : 0);
         if (writes === 0) return Promise.resolve(true);
         if (state.drains === null) state.drains = [];
-        return new Promise((resolve4) => {
-          state.drains.push({ writes, resolve: resolve4 });
+        return new Promise((resolve5) => {
+          state.drains.push({ writes, resolve: resolve5 });
         });
       }
       write(data) {
@@ -1463,10 +1463,10 @@ var require_streamx = __commonJS({
       cb(null);
     }
     function pipelinePromise(...streams) {
-      return new Promise((resolve4, reject) => {
+      return new Promise((resolve5, reject) => {
         return pipeline(...streams, (err) => {
           if (err) return reject(err);
-          resolve4();
+          resolve5();
         });
       });
     }
@@ -2136,16 +2136,16 @@ var require_extract = __commonJS({
           entryCallback = null;
           cb(err);
         }
-        function onnext(resolve4, reject) {
+        function onnext(resolve5, reject) {
           if (error) {
             return reject(error);
           }
           if (entryStream) {
-            resolve4({ value: entryStream, done: false });
+            resolve5({ value: entryStream, done: false });
             entryStream = null;
             return;
           }
-          promiseResolve = resolve4;
+          promiseResolve = resolve5;
           promiseReject = reject;
           consumeCallback(null);
           if (extract2._finished && promiseResolve) {
@@ -2173,11 +2173,11 @@ var require_extract = __commonJS({
         function destroy(err) {
           extract2.destroy(err);
           consumeCallback(err);
-          return new Promise((resolve4, reject) => {
-            if (extract2.destroyed) return resolve4({ value: void 0, done: true });
+          return new Promise((resolve5, reject) => {
+            if (extract2.destroyed) return resolve5({ value: void 0, done: true });
             extract2.once("close", function() {
               if (err) reject(err);
-              else resolve4({ value: void 0, done: true });
+              else resolve5({ value: void 0, done: true });
             });
           });
         }
@@ -2457,19 +2457,10 @@ var require_tar_stream = __commonJS({
   }
 });
 
-// src/cli.ts
-import { resolve as resolve3 } from "node:path";
+// src/workspace-cli.ts
+import { resolve as resolve4 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-
-// src/capsule.ts
-import { join as join2 } from "node:path";
-
-// src/archive.ts
-var import_tar_stream = __toESM(require_tar_stream(), 1);
-import { mkdirSync as mkdirSync2, writeFileSync as writeFileSync2 } from "node:fs";
-import { dirname as dirname2, join } from "node:path";
-import { gunzipSync } from "node:zlib";
 
 // src/common.ts
 import { createHash } from "node:crypto";
@@ -2580,7 +2571,18 @@ function output(values) {
   }
 }
 
+// src/workspace.ts
+import { existsSync as existsSync2, mkdirSync as mkdirSync7, readFileSync as readFileSync5 } from "node:fs";
+import { join as join8, resolve as resolve3 } from "node:path";
+
+// src/capsule.ts
+import { join as join2 } from "node:path";
+
 // src/archive.ts
+var import_tar_stream = __toESM(require_tar_stream(), 1);
+import { mkdirSync as mkdirSync2, writeFileSync as writeFileSync2 } from "node:fs";
+import { dirname as dirname2, join } from "node:path";
+import { gunzipSync } from "node:zlib";
 var MAX_CRATE = 32 * 1024 * 1024;
 var MAX_EXPANDED = 128 * 1024 * 1024;
 var MAX_FILES = 2e4;
@@ -2593,10 +2595,10 @@ async function archiveFiles(data, name, vers) {
   let count = 0;
   try {
     const tar = gunzipSync(data, { maxOutputLength: MAX_EXPANDED });
-    await new Promise((resolve4, reject) => {
+    await new Promise((resolve5, reject) => {
       const archive = (0, import_tar_stream.extract)();
       archive.on("error", reject);
-      archive.on("finish", resolve4);
+      archive.on("finish", resolve5);
       archive.on("entry", (header, stream, next) => {
         stream.on("error", reject);
         try {
@@ -3432,9 +3434,9 @@ async function load(directory, expected, bindings = {}) {
   return { candidate, crate: payloads["package.crate"], metadata: payloads["publish.json"], smoke: payloads["smoke.rs"] };
 }
 
-// src/consumer.ts
-import { mkdirSync as mkdirSync4, readFileSync as readFileSync2, writeFileSync as writeFileSync3 } from "node:fs";
-import { join as join4 } from "node:path";
+// src/plan.ts
+import { appendFileSync as appendFileSync2, readFileSync as readFileSync2, realpathSync as realpathSync2 } from "node:fs";
+import { basename, join as join4, relative as pathRelative2 } from "node:path";
 
 // src/process.ts
 import { spawn } from "node:child_process";
@@ -3445,7 +3447,7 @@ async function run(args, options) {
   const [command, ...rest] = args;
   requireThat(command, "missing command");
   console.log("+ " + args.join(" "));
-  return new Promise((resolve4, reject) => {
+  return new Promise((resolve5, reject) => {
     const child = spawn(command, rest, { cwd: options.cwd, env: options.env, shell: false, stdio: ["ignore", "pipe", "pipe"] });
     const chunks = [];
     let total = 0;
@@ -3470,7 +3472,7 @@ async function run(args, options) {
       clearTimeout(timer);
       if (failure) reject(failure);
       else if (code !== 0) reject(new ReleaseError(`command failed (${code}): ${args.join(" ")}`));
-      else resolve4(Buffer.concat(chunks).toString("utf8").trim());
+      else resolve5(Buffer.concat(chunks).toString("utf8").trim());
     });
   });
 }
@@ -3490,8 +3492,156 @@ async function temporary(prefix, action) {
   }
 }
 
-// src/registry.ts
-import { setTimeout as sleep } from "node:timers/promises";
+// src/plan.ts
+function graph(value, selected) {
+  const metadata = record(value, "Cargo metadata");
+  const ids = new Set(strings(metadata.workspace_members, "workspace members"));
+  requireThat(Array.isArray(metadata.packages), "invalid Cargo packages");
+  const members = metadata.packages.map((p) => record(p)).filter((p) => ids.has(String(p.id)));
+  const publishable = (p) => p.publish === null || Array.isArray(p.publish) && p.publish.length === 1 && p.publish[0] === "crates-io";
+  const names = selected ?? members.filter(publishable).map((p) => String(p.name));
+  requireThat(names.length > 0 && names.length <= 200 && new Set(names).size === names.length, "select 1\u2013200 distinct crates");
+  const packages = names.map((name) => {
+    valid(NAME, name, "crate name");
+    const pkg = members.find((p) => p.name === name);
+    requireThat(pkg && publishable(pkg), `${name} is not a publishable workspace member`);
+    requireThat(Array.isArray(pkg.targets) && pkg.targets.some((t) => {
+      const kinds = record(t).kind;
+      return Array.isArray(kinds) && kinds.some((k) => ["lib", "rlib", "proc-macro"].includes(k));
+    }), `${name}: only library crates are supported`);
+    requireThat(Array.isArray(pkg.dependencies), "invalid package dependencies");
+    const needs = /* @__PURE__ */ new Set();
+    for (const raw of pkg.dependencies) {
+      const dep = record(raw);
+      const sibling = members.find((p) => p.name === dep.name && (dep.path ? pathRelative2(String(dep.path), String(p.manifest_path)) === "Cargo.toml" : !dep.registry && (!dep.source || dep.source === "registry+https://github.com/rust-lang/crates.io-index")));
+      if (sibling && names.includes(String(sibling.name))) needs.add(String(sibling.name));
+    }
+    return { name, version: version(pkg.version), needs: [...needs].sort() };
+  });
+  const sorted = [], active = /* @__PURE__ */ new Set(), done = /* @__PURE__ */ new Set();
+  function visit(name) {
+    requireThat(!active.has(name), `workspace dependency cycle involving ${name}`);
+    if (done.has(name)) return;
+    active.add(name);
+    const pkg = packages.find((p) => p.name === name);
+    for (const dep of pkg.needs) visit(dep);
+    active.delete(name);
+    done.add(name);
+    sorted.push(pkg);
+  }
+  for (const name of [...names].sort()) visit(name);
+  return sorted;
+}
+function readPlan(path, expected, bindings = {}) {
+  valid(DIGEST, expected, "release plan digest");
+  const bytes = readRegular(path, 4 * 1024 * 1024);
+  requireThat(digest(bytes) === expected, "release plan digest mismatch");
+  const plan = record(JSON.parse(utf8(bytes)));
+  requireThat(plan.schema === "zrelease.plan/v1", "unsupported release plan");
+  const source = record(plan.source);
+  valid(REPO, source.repository, "source repository");
+  valid(SHA, source.commit, "source commit");
+  requireThat(typeof source.ref === "string" && typeof plan.publishing === "boolean", "invalid release context");
+  valid(SHA, plan.pipeline_ref, "pipeline revision");
+  valid(TOOLCHAIN, plan.toolchain, "toolchain");
+  for (const [want, actual] of [[bindings.repository, source.repository], [bindings.commit, source.commit], [bindings.pipelineRef, plan.pipeline_ref]]) {
+    requireThat(want === void 0 || want === actual, "release plan context mismatch");
+  }
+  requireThat(Array.isArray(plan.packages) && plan.packages.length > 0, "empty release plan");
+  const seen = /* @__PURE__ */ new Set();
+  for (const raw of plan.packages) {
+    const pkg = record(raw);
+    valid(NAME, pkg.name, "crate");
+    version(pkg.version);
+    requireThat(!seen.has(String(pkg.name)), "duplicate release crate");
+    requireThat(strings(pkg.needs, "crate dependencies").every((dep) => seen.has(dep)), "release plan is not dependency ordered");
+    seen.add(String(pkg.name));
+  }
+  return plan;
+}
+function bindCandidate(plan, candidate) {
+  const pkg = plan.packages.find((p) => p.name === candidate.package.name);
+  requireThat(
+    pkg?.version === candidate.package.version && canonical(plan.source).equals(canonical(candidate.source)) && plan.pipeline_ref === candidate.pipeline.revision && plan.toolchain === candidate.toolchain.requested,
+    "candidate differs from the approved release plan"
+  );
+}
+function dependencyNames(plan, name) {
+  const names = /* @__PURE__ */ new Set();
+  function visit(name2) {
+    const pkg = plan.packages.find((p) => p.name === name2);
+    requireThat(pkg, "package is absent from the release plan");
+    for (const dep of pkg.needs) if (!names.has(dep)) {
+      names.add(dep);
+      visit(dep);
+    }
+  }
+  visit(name);
+  return [...names].sort();
+}
+async function planRelease(options) {
+  const source = realpathSync2(options.source);
+  valid(REPO, options.repository, "repository");
+  valid(SHA, options.commit, "commit");
+  valid(SHA, options.pipelineRef, "pipeline revision");
+  valid(TOOLCHAIN, options.toolchain, "toolchain");
+  const manifest = within(source, options.manifest);
+  requireThat(basename(manifest) === "Cargo.toml", "manifest must end in Cargo.toml");
+  requireThat(await run(["git", "rev-parse", "HEAD"], { cwd: source }) === options.commit, "checkout differs from release commit");
+  requireThat(!await run(["git", "status", "--porcelain", "--untracked-files=all"], { cwd: source }), "source checkout is dirty");
+  if (options.baseBranch) {
+    await run(["git", "check-ref-format", `refs/heads/${options.baseBranch}`], { cwd: source });
+    await run(["git", "merge-base", "--is-ancestor", options.commit, `refs/remotes/origin/${options.baseBranch}`], { cwd: source });
+  }
+  const packages = await temporary("zrelease-plan-", async (work) => {
+    const env = cargoEnvironment(join4(work, "cargo-home"), join4(work, "target"));
+    const raw = await run(["cargo", `+${options.toolchain}`, "metadata", "--no-deps", "--locked", "--format-version", "1", "--manifest-path", manifest], { cwd: source, env });
+    return graph(JSON.parse(raw), options.workspace ? void 0 : options.members.map((p) => p.name));
+  });
+  const expected = options.members.map((p) => ({ name: p.name, needs: [...p.needs].sort() })).sort((a, b) => a.name.localeCompare(b.name));
+  const actual = packages.map(({ name, needs }) => ({ name, needs })).sort((a, b) => a.name.localeCompare(b.name));
+  requireThat(canonical(expected).equals(canonical(actual)), "workspace dependencies changed; regenerate the release workflow");
+  if (options.publishing) {
+    requireThat(options.ref.startsWith(`refs/tags/${options.tagPrefix}`), "publication requires a release tag");
+    if (packages.length === 1) requireThat(options.ref === `refs/tags/${options.tagPrefix}${packages[0].version}`, "single-crate release requires an exact version tag");
+    await run(["git", "check-ref-format", options.ref], { cwd: source });
+    requireThat(await run(["git", "rev-parse", `${options.ref}^{commit}`], { cwd: source }) === options.commit, "release tag differs from source commit");
+  }
+  const plan = {
+    schema: "zrelease.plan/v1",
+    source: { repository: options.repository, commit: options.commit, ref: options.ref },
+    pipeline_ref: options.pipelineRef,
+    toolchain: options.toolchain,
+    manifest: options.manifest,
+    publishing: options.publishing,
+    packages
+  };
+  writeJson(options.out, plan);
+  const sha = digest(readFileSync2(options.out));
+  output({ plan_sha256: sha });
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync2(
+    process.env.GITHUB_STEP_SUMMARY,
+    `## Release
+
+Commit: \`${options.commit}\`
+
+Plan: \`${sha}\`
+
+| Crate | Version | After |
+| --- | --- | --- |
+` + packages.map((p) => `| ${p.name} | ${p.version} | ${p.needs.join(", ") || "\u2014"} |`).join("\n") + "\n\n" + (options.publishing ? "Approve this release once in the release environment. Crates publish and verify in dependency order.\n" : "Rehearsal only; nothing will be published.\n")
+  );
+  return plan;
+}
+
+// src/prepare.ts
+import { existsSync, mkdirSync as mkdirSync6, readFileSync as readFileSync4, realpathSync as realpathSync3, writeFileSync as writeFileSync5 } from "node:fs";
+import { basename as basename2, join as join7, resolve as resolve2 } from "node:path";
+
+// src/staging.ts
+import { createServer } from "node:http";
+import { mkdirSync as mkdirSync4, readdirSync, writeFileSync as writeFileSync3 } from "node:fs";
+import { join as join5 } from "node:path";
 
 // src/http.ts
 import { request as httpRequest } from "node:http";
@@ -3536,7 +3686,7 @@ var Http = class {
       headers.Accept = "application/vnd.github+json";
       headers["X-GitHub-Api-Version"] = "2022-11-28";
     }
-    return new Promise((resolve4, reject) => {
+    return new Promise((resolve5, reject) => {
       const send = parsed.protocol === "https:" ? httpsRequest : httpRequest;
       const request = send(parsed, { method, headers }, (response) => {
         const status = response.statusCode ?? 0;
@@ -3554,7 +3704,7 @@ var Http = class {
             response.destroy();
           } else chunks.push(chunk);
         });
-        response.on("end", () => resolve4(Buffer.concat(chunks)));
+        response.on("end", () => resolve5(Buffer.concat(chunks)));
         response.on("error", () => reject(new TransportError(`${method} ${url}: transport failure; remote outcome may be unknown`)));
       });
       const timer = setTimeout(() => request.destroy(new Error("request deadline exceeded")), 3e4);
@@ -3566,6 +3716,7 @@ var Http = class {
 };
 
 // src/registry.ts
+import { setTimeout as sleep } from "node:timers/promises";
 function indexPath(input) {
   const name = input.toLowerCase();
   if (name.length <= 2) return `${name.length}/${name}`;
@@ -3675,7 +3826,99 @@ var Registry = class {
   }
 };
 
+// src/staging.ts
+function indexEntry(metadata, crate) {
+  return canonical({
+    name: metadata.name,
+    vers: metadata.vers,
+    cksum: digest(crate),
+    yanked: false,
+    v: 2,
+    features: {},
+    features2: metadata.features,
+    links: metadata.links ?? null,
+    rust_version: metadata.rust_version ?? null,
+    deps: metadata.deps.map((dep) => ({
+      name: dep.explicit_name_in_toml ?? dep.name,
+      package: dep.explicit_name_in_toml ? dep.name : null,
+      req: dep.version_req,
+      features: dep.features,
+      optional: dep.optional,
+      default_features: dep.default_features,
+      target: dep.target,
+      kind: dep.kind,
+      registry: null
+    }))
+  });
+}
+function configureStaging(home, index) {
+  mkdirSync4(home, { recursive: true });
+  writeFileSync3(join5(home, "config.toml"), `[source.crates-io]
+replace-with = "zrelease-staging"
+[source.zrelease-staging]
+registry = "${index}"
+`);
+}
+async function stagingRegistry(initial = [], upstream = new Http()) {
+  const capsules = [...initial];
+  let base = "";
+  const server = createServer(async (request, response) => {
+    const send = (status, data) => {
+      response.writeHead(status, { "Content-Length": data.length });
+      response.end(data);
+    };
+    try {
+      requireThat(request.method === "GET" && !request.headers.authorization, "staging registry is read-only and anonymous");
+      const path = request.url ?? "";
+      if (path === "/index/config.json") {
+        send(200, canonical({ dl: `${base}/crates/{crate}/{crate}-{version}.crate` }));
+        return;
+      }
+      const archive = /^\/crates\/([A-Za-z0-9_-]+)\/\1-([0-9A-Za-z.-]+)\.crate$/.exec(path);
+      if (archive) {
+        const local = capsules.find((c) => c.candidate.package.name === archive[1] && c.candidate.package.version === archive[2]);
+        send(200, local?.crate ?? await upstream.request("GET", "https://static.crates.io" + path, { limit: 100 * 1024 * 1024 }));
+        return;
+      }
+      requireThat(/^\/index\/(?:[a-z0-9_-]+\/){1,2}[a-z0-9_-]+$/.test(path), "invalid index path");
+      const locals = capsules.filter((c) => path === "/index/" + indexPath(c.candidate.package.name));
+      let bytes = Buffer.alloc(0);
+      try {
+        bytes = await upstream.request("GET", "https://index.crates.io" + path.slice(6), { limit: 16 * 1024 * 1024 });
+      } catch (error) {
+        if (!(error instanceof HttpError && error.status === 404 && locals.length)) throw error;
+      }
+      const versions = new Set(locals.map((c) => c.candidate.package.version));
+      const entries = utf8(bytes).split(/\r?\n/).filter(Boolean).filter((line) => !versions.has(String(record(JSON.parse(line)).vers)));
+      send(200, Buffer.concat([
+        Buffer.from(entries.length ? entries.join("\n") + "\n" : ""),
+        ...locals.map((c) => indexEntry(JSON.parse(utf8(c.metadata)), c.crate))
+      ]));
+    } catch (error) {
+      send(error instanceof HttpError ? error.status : 400, Buffer.from("{}"));
+    }
+  });
+  await new Promise((resolve5, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve5);
+  });
+  const address = server.address();
+  requireThat(address && typeof address !== "string", "missing staging registry address");
+  base = `http://127.0.0.1:${address.port}`;
+  return {
+    add: (capsule) => capsules.push(capsule),
+    configure: (home) => configureStaging(home, `sparse+${base}/index/`),
+    registry: new Registry(new Http(true), { index: base + "/index", download: base + "/crates", timeout: 2e3, interval: 10 }),
+    close: () => new Promise((resolve5, reject) => {
+      server.close((error) => error ? reject(error) : resolve5());
+      server.closeAllConnections();
+    })
+  };
+}
+
 // src/consumer.ts
+import { mkdirSync as mkdirSync5, readFileSync as readFileSync3, writeFileSync as writeFileSync4 } from "node:fs";
+import { join as join6 } from "node:path";
 function checkResolution(value, name, version2) {
   const metadata = record(value), resolution = record(metadata.resolve);
   requireThat(Array.isArray(resolution.nodes) && Array.isArray(metadata.packages), "invalid Cargo resolution");
@@ -3690,8 +3933,8 @@ function checkResolution(value, name, version2) {
 async function runConsumer(candidate, capsule, configure) {
   const { name, version: version2 } = candidate.package;
   return temporary("zrelease-consumer-", async (work) => {
-    const project = join4(work, "consumer");
-    mkdirSync4(join4(project, "src"), { recursive: true });
+    const project = join6(work, "consumer");
+    mkdirSync5(join6(project, "src"), { recursive: true });
     const config = candidate.consumer;
     const manifest = `[package]
 name = "zrelease-consumer"
@@ -3702,38 +3945,190 @@ publish = false
 [dependencies]
 subject = { package = ${JSON.stringify(name)}, version = ${JSON.stringify("=" + version2)}, default-features = ${config.default_features}, features = ${JSON.stringify(config.features)} }
 `;
-    writeFileSync3(join4(project, "Cargo.toml"), manifest);
-    writeFileSync3(join4(project, "src", "main.rs"), readFileSync2(join4(capsule, "smoke.rs")));
-    const env = cargoEnvironment(join4(work, "cargo-home"), join4(work, "target"));
+    writeFileSync4(join6(project, "Cargo.toml"), manifest);
+    writeFileSync4(join6(project, "src", "main.rs"), readFileSync3(join6(capsule, "smoke.rs")));
+    const env = cargoEnvironment(join6(work, "cargo-home"), join6(work, "target"));
     configure?.(env.CARGO_HOME);
     const cargo = ["cargo", "+" + candidate.toolchain.requested];
     await run([...cargo, "generate-lockfile"], { cwd: project, env });
     const metadata = JSON.parse(await run([...cargo, "metadata", "--locked", "--format-version", "1"], { cwd: project, env }));
     checkResolution(metadata, name, version2);
     for (const command of ["build", "test", "run"]) await run([...cargo, command, "--locked"], { cwd: project, env });
-    return readFileSync2(join4(project, "Cargo.lock"));
+    return readFileSync3(join6(project, "Cargo.lock"));
   });
 }
-async function verifyConsumer(candidate, capsule, reportDir, candidateSha) {
-  const { name, version: version2 } = candidate.package;
-  const observed = await new Registry().observe(name, version2, candidate.files["package.crate"].sha256);
-  const lockfile = await runConsumer(candidate, capsule);
-  mkdirSync4(reportDir, { recursive: true });
-  writeFileSync3(join4(reportDir, "consumer.Cargo.lock"), lockfile);
-  const result = {
-    schema: "zrelease.consumer/v1",
-    state: "consumer-verified",
-    candidate_sha256: candidateSha,
-    package: candidate.package,
-    source: candidate.source,
-    registry: observed,
-    verified_at: utcNow(),
-    cargo_lock_sha256: digest(lockfile),
-    checks: ["exact registry resolution", "build --locked", "test --locked", "run --locked"]
-  };
-  writeJson(join4(reportDir, "consumer.json"), result);
-  return result;
+
+// src/prepare.ts
+async function prepare(options) {
+  const source = realpathSync3(options.source), outputDir = resolve2(options.outputDir);
+  const { package: name, toolchain, repository, commit, ref, pipelineRef } = options;
+  const { manifest = "Cargo.toml", publishing = false, tagPrefix = "v", baseBranch = "main", smoke = "", features = [], defaultFeatures = true } = options;
+  valid(NAME, name, "package");
+  valid(TOOLCHAIN, toolchain, "pinned Rust toolchain");
+  valid(REPO, repository, "repository");
+  valid(SHA, commit, "commit");
+  valid(SHA, pipelineRef, "pipeline revision");
+  requireThat(!existsSync(outputDir), "capsule output directory already exists");
+  requireThat(!inside(source, outputDir), "capsule output must be outside the source checkout");
+  const path = within(source, manifest);
+  requireThat(basename2(path) === "Cargo.toml", "manifest path must end in Cargo.toml");
+  requireThat(await run(["git", "rev-parse", "HEAD"], { cwd: source }) === commit, "checkout does not match the triggering commit");
+  requireThat(!await run(["git", "status", "--porcelain", "--untracked-files=all"], { cwd: source }), "source checkout is dirty");
+  if (baseBranch) {
+    await run(["git", "check-ref-format", `refs/heads/${baseBranch}`], { cwd: source });
+    await run(["git", "merge-base", "--is-ancestor", commit, `refs/remotes/origin/${baseBranch}`], { cwd: source });
+  }
+  requireThat(Array.isArray(features) && features.every((f) => typeof f === "string" && f && !/[\n\r, ]/.test(f)), "features must be an array of nonempty individual feature names");
+  const staging = await stagingRegistry(publishing ? [] : options.dependencies);
+  try {
+    const candidate = await temporary("zrelease-prepare-", async (work) => {
+      const env = cargoEnvironment(join7(work, "cargo-home"), join7(work, "target"));
+      if (!publishing && options.dependencies?.length) staging.configure(env.CARGO_HOME);
+      const cargo = ["cargo", `+${toolchain}`];
+      const rustc = await run(["rustc", `+${toolchain}`, "--version", "--verbose"], { cwd: work, env });
+      const cargoVersion = await run([...cargo, "--version"], { cwd: work, env });
+      const raw = await run([...cargo, "metadata", "--no-deps", "--locked", "--format-version", "1", "--manifest-path", path], { cwd: source, env });
+      const metadata = record(JSON.parse(raw));
+      requireThat(Array.isArray(metadata.workspace_members) && Array.isArray(metadata.packages), "invalid Cargo workspace metadata");
+      const members = new Set(metadata.workspace_members);
+      const selected = metadata.packages.map((p) => record(p)).filter((p) => p.name === name && members.has(p.id));
+      requireThat(selected.length === 1, "package must select exactly one workspace member");
+      const pkg = selected[0];
+      const vers = version(pkg.version);
+      requireThat(Array.isArray(pkg.targets) && pkg.targets.some((t) => {
+        const target = record(t);
+        return Array.isArray(target.kind) && target.kind.some((k) => ["lib", "rlib", "proc-macro"].includes(k));
+      }), "this pipeline supports library crates, not binary-only packages");
+      requireThat(pkg.publish === null || Array.isArray(pkg.publish) && pkg.publish.length === 1 && pkg.publish[0] === "crates-io", "selected package forbids publication to crates.io");
+      if (publishing && !options.plan) {
+        requireThat(ref === `refs/tags/${tagPrefix}${vers}`, "live publication requires a tag that exactly matches the package version");
+        requireThat(await run(["git", "rev-parse", `${ref}^{commit}`], { cwd: source }) === commit, "release tag does not resolve to the triggering commit");
+      }
+      const flags = defaultFeatures ? [] : ["--no-default-features"];
+      if (features.length) flags.push("--features", features.join(","));
+      const checks = [];
+      for (const command of ["test", "package"]) {
+        const argv2 = [...cargo, command, "--locked", "--manifest-path", path, "--package", name, ...flags];
+        await run(argv2, { cwd: source, env });
+        checks.push({ argv: argv2, exit_code: 0 });
+      }
+      const crate = readFileSync4(join7(work, "target", "package", `${name}-${vers}.crate`));
+      const files = await archiveFiles(crate, name, vers);
+      const publishMetadata = normalizedMetadata(files, name, vers);
+      const vcsBytes = files.get(".cargo_vcs_info.json");
+      if (vcsBytes) {
+        const git = record(record(JSON.parse(utf8(vcsBytes))).git);
+        requireThat(git.sha1 === commit, "archive VCS revision does not match candidate source");
+        requireThat(!git.dirty, "archive records a dirty source checkout");
+      }
+      requireThat(canonical(publishMetadata.features).equals(canonical(pkg.features)), "feature translation disagrees with cargo metadata; stop rather than publish");
+      const unpacked = join7(work, "unpacked");
+      extractFiles(files, unpacked);
+      const archiveEnv = cargoEnvironment(join7(work, "archive-cargo-home"), join7(work, "archive-target"));
+      if (!publishing && options.dependencies?.length) staging.configure(archiveEnv.CARGO_HOME);
+      const argv = [...cargo, "test", "--locked", ...flags];
+      await run(argv, { cwd: unpacked, env: archiveEnv });
+      checks.push({ argv, scope: "exact packaged archive", exit_code: 0 });
+      requireThat(!await run(["git", "status", "--porcelain", "--untracked-files=all"], { cwd: source }), "qualification modified the source checkout");
+      requireThat(await run(["git", "rev-parse", "HEAD"], { cwd: source }) === commit, "qualification changed the checked-out revision");
+      const smokeBytes = smoke ? readFileSync4(within(source, smoke)) : Buffer.from("extern crate subject;\nfn main() {}\n");
+      requireThat(smokeBytes.length <= 256 * 1024, "consumer smoke source is too large");
+      utf8(smokeBytes);
+      mkdirSync6(outputDir, { recursive: true });
+      const payloads = { "package.crate": crate, "publish.json": canonical(publishMetadata), "smoke.rs": smokeBytes };
+      for (const [filename, data] of Object.entries(payloads)) writeFileSync5(join7(outputDir, filename), data);
+      const result = {
+        schema: SCHEMA,
+        created_at: utcNow(),
+        package: { name, version: vers },
+        source: { repository, commit, ref },
+        ...options.plan ? { release_plan_sha256: digest(canonical(options.plan)) } : {},
+        pipeline: { repository: "zsumz/zrelease", revision: pipelineRef },
+        toolchain: { requested: toolchain, rustc, cargo: cargoVersion },
+        consumer: { features, default_features: defaultFeatures },
+        qualification: { checks, note: "The caller must additionally gate its domain-specific canonical CI." },
+        files: Object.fromEntries(Object.entries(payloads).map(([k, v]) => [k, { sha256: digest(v), size: v.length }]))
+      };
+      if (options.plan) {
+        bindCandidate(options.plan, result);
+        requireThat(options.plan.publishing === publishing, "release plan publish mode mismatch");
+      }
+      staging.add({ candidate: result, crate, metadata: payloads["publish.json"], smoke: smokeBytes });
+      await runConsumer(result, outputDir, staging.configure);
+      requireThat(!await run(["git", "status", "--porcelain", "--untracked-files=all"], { cwd: source }), "consumer modified the source checkout");
+      requireThat(await run(["git", "rev-parse", "HEAD"], { cwd: source }) === commit, "consumer changed the checked-out revision");
+      for (const [filename, data] of Object.entries(payloads)) requireThat(readFileSync4(join7(outputDir, filename)).equals(data), "consumer modified a sealed payload");
+      for (const command of ["build", "test", "run"]) checks.push({ argv: [...cargo, command, "--locked"], scope: "fresh consumer against exact staged archives", exit_code: 0 });
+      writeJson(join7(outputDir, "candidate.json"), result);
+      return result;
+    });
+    const sha = digest(readFileSync4(join7(outputDir, "candidate.json")));
+    output({ candidate_sha256: sha, crate_sha256: candidate.files["package.crate"].sha256, version: candidate.package.version, package: name });
+    console.log(`Candidate SHA-256: ${sha}`);
+    return candidate;
+  } finally {
+    await staging.close();
+  }
 }
+
+// src/workspace.ts
+async function prepareWorkspace(options) {
+  const root = resolve3(options.out);
+  requireThat(!existsSync2(root), "workspace output already exists");
+  requireThat(!inside(resolve3(options.source), root), "workspace output must be outside the source checkout");
+  mkdirSync7(root, { recursive: true });
+  const plan = await planRelease({ ...options, publishing: false, out: join8(root, "release-plan.json") });
+  requireThat(Object.keys(options.smokes).every((name) => plan.packages.some((p) => p.name === name)), "smoke source names an unselected crate");
+  const index = { schema: "zrelease.workspace/v1", plan_sha256: digest(canonical(plan)), packages: [] };
+  const capsules = /* @__PURE__ */ new Map();
+  for (const pkg of plan.packages) {
+    console.log(`::group::Package ${pkg.name} ${pkg.version}`);
+    try {
+      const directory = join8(root, "candidates", pkg.name);
+      await prepare({
+        ...options,
+        package: pkg.name,
+        plan,
+        publishing: false,
+        outputDir: directory,
+        smoke: options.smokes[pkg.name] ?? "",
+        dependencies: dependencyNames(plan, pkg.name).map((name) => capsules.get(name))
+      });
+      const sha256 = digest(readFileSync5(join8(directory, "candidate.json")));
+      capsules.set(pkg.name, await load(directory, sha256));
+      index.packages.push({ name: pkg.name, sha256 });
+    } finally {
+      console.log("::endgroup::");
+    }
+  }
+  writeJson(join8(root, "workspace.json"), index);
+  output({ workspace_sha256: digest(canonical(index)) });
+  return index;
+}
+async function loadWorkspace(root, expected, bindings = {}) {
+  const bytes = readRegular(join8(root, "workspace.json"), 4 * 1024 * 1024);
+  requireThat(digest(bytes) === expected, "workspace digest mismatch");
+  const raw = record(JSON.parse(utf8(bytes)));
+  requireThat(raw.schema === "zrelease.workspace/v1" && typeof raw.plan_sha256 === "string", "invalid workspace bundle");
+  const plan = readPlan(join8(root, "release-plan.json"), raw.plan_sha256, bindings);
+  requireThat(plan.publishing === false, "workspace rehearsal cannot use a publishing plan");
+  requireThat(Array.isArray(raw.packages) && raw.packages.length === plan.packages.length, "workspace release set differs from plan");
+  const capsules = [];
+  for (let i = 0; i < plan.packages.length; i++) {
+    const pkg = record(raw.packages[i]);
+    const name = plan.packages[i].name;
+    requireThat(pkg.name === name && typeof pkg.sha256 === "string", "workspace order differs from plan");
+    const capsule = await load(join8(root, "candidates", name), pkg.sha256, { ...bindings, package: name });
+    bindCandidate(plan, capsule.candidate);
+    requireThat(capsule.candidate.release_plan_sha256 === raw.plan_sha256, "candidate belongs to another release plan");
+    capsules.push(capsule);
+  }
+  return { index: raw, plan, capsules };
+}
+
+// src/workspace-rehearsal.ts
+import { appendFileSync as appendFileSync4, mkdirSync as mkdirSync8 } from "node:fs";
+import { join as join10 } from "node:path";
 
 // src/deployment.ts
 var Deployments = class {
@@ -3799,8 +4194,8 @@ function terminalState(results, production) {
 }
 
 // src/finish.ts
-import { appendFileSync as appendFileSync2, existsSync } from "node:fs";
-import { join as join5 } from "node:path";
+import { appendFileSync as appendFileSync3, existsSync as existsSync3 } from "node:fs";
+import { join as join9 } from "node:path";
 function verifiedEvidence(candidate, candidateSha, observations, production) {
   try {
     const matchesIdentity = (report) => canonical(report.package).equals(canonical(candidate.package)) && canonical(report.source).equals(canonical(candidate.source));
@@ -3832,8 +4227,8 @@ async function finish(candidate, options, api) {
   const observations = {};
   if (reports) {
     for (const filename of ["registry.json", "consumer.json", "rehearsal.json"]) {
-      const path = join5(reports, filename);
-      if (existsSync(path)) {
+      const path = join9(reports, filename);
+      if (existsSync3(path)) {
         try {
           observations[filename] = readJson(path);
         } catch {
@@ -3875,7 +4270,7 @@ async function finish(candidate, options, api) {
   output({ deployment_status: status, phase });
   if (process.env.GITHUB_STEP_SUMMARY && options.summary !== false) {
     const message = status === "success" && production ? "Registry delivery and consumer checks completed.\n" : !production ? "This was a rehearsal; no package was published.\n" : "Delivery needs investigation. A failed workflow does not undo a registry write.\n";
-    appendFileSync2(process.env.GITHUB_STEP_SUMMARY, `## ${name} ${version2}
+    appendFileSync3(process.env.GITHUB_STEP_SUMMARY, `## ${name} ${version2}
 
 **${phase}**
 
@@ -3889,118 +4284,6 @@ ${message}`);
 
 // src/mock.ts
 import { createServer as createServer2 } from "node:http";
-
-// src/staging.ts
-import { createServer } from "node:http";
-import { mkdirSync as mkdirSync5, readdirSync, writeFileSync as writeFileSync4 } from "node:fs";
-import { join as join6 } from "node:path";
-async function loadDependencies(directory, hashes, bindings) {
-  requireThat(new Set(hashes).size === hashes.length, "duplicate dependency candidate");
-  const dirs = readdirSync(directory, { withFileTypes: true });
-  requireThat(dirs.every((d) => d.isDirectory()) && dirs.length === hashes.length, "dependency artifacts differ from the release graph");
-  const found = /* @__PURE__ */ new Set(), names = /* @__PURE__ */ new Set();
-  const result = [];
-  for (const dir of dirs) {
-    const path = join6(directory, dir.name), sha = digest(readRegular(join6(path, "candidate.json"), 4 * 1024 * 1024));
-    requireThat(hashes.includes(sha) && !found.has(sha), "unexpected dependency candidate digest");
-    const capsule = await load(path, sha, bindings);
-    requireThat(!names.has(capsule.candidate.package.name), "duplicate dependency crate");
-    found.add(sha);
-    names.add(capsule.candidate.package.name);
-    result.push(capsule);
-  }
-  return result;
-}
-function indexEntry(metadata, crate) {
-  return canonical({
-    name: metadata.name,
-    vers: metadata.vers,
-    cksum: digest(crate),
-    yanked: false,
-    v: 2,
-    features: {},
-    features2: metadata.features,
-    links: metadata.links ?? null,
-    rust_version: metadata.rust_version ?? null,
-    deps: metadata.deps.map((dep) => ({
-      name: dep.explicit_name_in_toml ?? dep.name,
-      package: dep.explicit_name_in_toml ? dep.name : null,
-      req: dep.version_req,
-      features: dep.features,
-      optional: dep.optional,
-      default_features: dep.default_features,
-      target: dep.target,
-      kind: dep.kind,
-      registry: null
-    }))
-  });
-}
-function configureStaging(home, index) {
-  mkdirSync5(home, { recursive: true });
-  writeFileSync4(join6(home, "config.toml"), `[source.crates-io]
-replace-with = "zrelease-staging"
-[source.zrelease-staging]
-registry = "${index}"
-`);
-}
-async function stagingRegistry(initial = [], upstream = new Http()) {
-  const capsules = [...initial];
-  let base = "";
-  const server = createServer(async (request, response) => {
-    const send = (status, data) => {
-      response.writeHead(status, { "Content-Length": data.length });
-      response.end(data);
-    };
-    try {
-      requireThat(request.method === "GET" && !request.headers.authorization, "staging registry is read-only and anonymous");
-      const path = request.url ?? "";
-      if (path === "/index/config.json") {
-        send(200, canonical({ dl: `${base}/crates/{crate}/{crate}-{version}.crate` }));
-        return;
-      }
-      const archive = /^\/crates\/([A-Za-z0-9_-]+)\/\1-([0-9A-Za-z.-]+)\.crate$/.exec(path);
-      if (archive) {
-        const local = capsules.find((c) => c.candidate.package.name === archive[1] && c.candidate.package.version === archive[2]);
-        send(200, local?.crate ?? await upstream.request("GET", "https://static.crates.io" + path, { limit: 100 * 1024 * 1024 }));
-        return;
-      }
-      requireThat(/^\/index\/(?:[a-z0-9_-]+\/){1,2}[a-z0-9_-]+$/.test(path), "invalid index path");
-      const locals = capsules.filter((c) => path === "/index/" + indexPath(c.candidate.package.name));
-      let bytes = Buffer.alloc(0);
-      try {
-        bytes = await upstream.request("GET", "https://index.crates.io" + path.slice(6), { limit: 16 * 1024 * 1024 });
-      } catch (error) {
-        if (!(error instanceof HttpError && error.status === 404 && locals.length)) throw error;
-      }
-      const versions = new Set(locals.map((c) => c.candidate.package.version));
-      const entries = utf8(bytes).split(/\r?\n/).filter(Boolean).filter((line) => !versions.has(String(record(JSON.parse(line)).vers)));
-      send(200, Buffer.concat([
-        Buffer.from(entries.length ? entries.join("\n") + "\n" : ""),
-        ...locals.map((c) => indexEntry(JSON.parse(utf8(c.metadata)), c.crate))
-      ]));
-    } catch (error) {
-      send(error instanceof HttpError ? error.status : 400, Buffer.from("{}"));
-    }
-  });
-  await new Promise((resolve4, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve4);
-  });
-  const address = server.address();
-  requireThat(address && typeof address !== "string", "missing staging registry address");
-  base = `http://127.0.0.1:${address.port}`;
-  return {
-    add: (capsule) => capsules.push(capsule),
-    configure: (home) => configureStaging(home, `sparse+${base}/index/`),
-    registry: new Registry(new Http(true), { index: base + "/index", download: base + "/crates", timeout: 2e3, interval: 10 }),
-    close: () => new Promise((resolve4, reject) => {
-      server.close((error) => error ? reject(error) : resolve4());
-      server.closeAllConnections();
-    })
-  };
-}
-
-// src/mock.ts
 var State = class {
   versions = /* @__PURE__ */ new Map();
   puts = 0;
@@ -4092,9 +4375,9 @@ async function registryServer() {
       else response.destroy();
     }
   });
-  await new Promise((resolve4, reject) => {
+  await new Promise((resolve5, reject) => {
     server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve4);
+    server.listen(0, "127.0.0.1", resolve5);
   });
   const address = server.address();
   requireThat(address && typeof address !== "string", "missing mock address");
@@ -4103,8 +4386,8 @@ async function registryServer() {
     state,
     registry: new Registry(new Http(true), { api: base, index: base + "/index", download: base + "/crates", timeout: 2e3, interval: 10 }),
     configure: (home) => configureStaging(home, `sparse+${base}/index/`),
-    close: () => new Promise((resolve4, reject) => {
-      server.close((error) => error ? reject(error) : resolve4());
+    close: () => new Promise((resolve5, reject) => {
+      server.close((error) => error ? reject(error) : resolve5());
       server.closeAllConnections();
     })
   };
@@ -4136,461 +4419,154 @@ async function rehearse(candidate, crate, metadata) {
   }
 }
 
-// src/prepare.ts
-import { existsSync as existsSync2, mkdirSync as mkdirSync6, readFileSync as readFileSync4, realpathSync as realpathSync3, writeFileSync as writeFileSync5 } from "node:fs";
-import { basename as basename2, join as join8, resolve as resolve2 } from "node:path";
-
-// src/plan.ts
-import { appendFileSync as appendFileSync3, readFileSync as readFileSync3, realpathSync as realpathSync2 } from "node:fs";
-import { basename, join as join7, relative as pathRelative2 } from "node:path";
-function graph(value, selected) {
-  const metadata = record(value, "Cargo metadata");
-  const ids = new Set(strings(metadata.workspace_members, "workspace members"));
-  requireThat(Array.isArray(metadata.packages), "invalid Cargo packages");
-  const members = metadata.packages.map((p) => record(p)).filter((p) => ids.has(String(p.id)));
-  const publishable = (p) => p.publish === null || Array.isArray(p.publish) && p.publish.length === 1 && p.publish[0] === "crates-io";
-  const names = selected ?? members.filter(publishable).map((p) => String(p.name));
-  requireThat(names.length > 0 && names.length <= 200 && new Set(names).size === names.length, "select 1\u2013200 distinct crates");
-  const packages = names.map((name) => {
-    valid(NAME, name, "crate name");
-    const pkg = members.find((p) => p.name === name);
-    requireThat(pkg && publishable(pkg), `${name} is not a publishable workspace member`);
-    requireThat(Array.isArray(pkg.targets) && pkg.targets.some((t) => {
-      const kinds = record(t).kind;
-      return Array.isArray(kinds) && kinds.some((k) => ["lib", "rlib", "proc-macro"].includes(k));
-    }), `${name}: only library crates are supported`);
-    requireThat(Array.isArray(pkg.dependencies), "invalid package dependencies");
-    const needs = /* @__PURE__ */ new Set();
-    for (const raw of pkg.dependencies) {
-      const dep = record(raw);
-      const sibling = members.find((p) => p.name === dep.name && (dep.path ? pathRelative2(String(dep.path), String(p.manifest_path)) === "Cargo.toml" : !dep.registry && (!dep.source || dep.source === "registry+https://github.com/rust-lang/crates.io-index")));
-      if (sibling && names.includes(String(sibling.name))) needs.add(String(sibling.name));
-    }
-    return { name, version: version(pkg.version), needs: [...needs].sort() };
-  });
-  const sorted = [], active = /* @__PURE__ */ new Set(), done = /* @__PURE__ */ new Set();
-  function visit(name) {
-    requireThat(!active.has(name), `workspace dependency cycle involving ${name}`);
-    if (done.has(name)) return;
-    active.add(name);
-    const pkg = packages.find((p) => p.name === name);
-    for (const dep of pkg.needs) visit(dep);
-    active.delete(name);
-    done.add(name);
-    sorted.push(pkg);
-  }
-  for (const name of [...names].sort()) visit(name);
-  return sorted;
-}
-function readPlan(path, expected, bindings = {}) {
-  valid(DIGEST, expected, "release plan digest");
-  const bytes = readRegular(path, 4 * 1024 * 1024);
-  requireThat(digest(bytes) === expected, "release plan digest mismatch");
-  const plan = record(JSON.parse(utf8(bytes)));
-  requireThat(plan.schema === "zrelease.plan/v1", "unsupported release plan");
-  const source = record(plan.source);
-  valid(REPO, source.repository, "source repository");
-  valid(SHA, source.commit, "source commit");
-  requireThat(typeof source.ref === "string" && typeof plan.publishing === "boolean", "invalid release context");
-  valid(SHA, plan.pipeline_ref, "pipeline revision");
-  valid(TOOLCHAIN, plan.toolchain, "toolchain");
-  for (const [want, actual] of [[bindings.repository, source.repository], [bindings.commit, source.commit], [bindings.pipelineRef, plan.pipeline_ref]]) {
-    requireThat(want === void 0 || want === actual, "release plan context mismatch");
-  }
-  requireThat(Array.isArray(plan.packages) && plan.packages.length > 0, "empty release plan");
-  const seen = /* @__PURE__ */ new Set();
-  for (const raw of plan.packages) {
-    const pkg = record(raw);
-    valid(NAME, pkg.name, "crate");
-    version(pkg.version);
-    requireThat(!seen.has(String(pkg.name)), "duplicate release crate");
-    requireThat(strings(pkg.needs, "crate dependencies").every((dep) => seen.has(dep)), "release plan is not dependency ordered");
-    seen.add(String(pkg.name));
-  }
-  return plan;
-}
-function bindCandidate(plan, candidate) {
-  const pkg = plan.packages.find((p) => p.name === candidate.package.name);
-  requireThat(
-    pkg?.version === candidate.package.version && canonical(plan.source).equals(canonical(candidate.source)) && plan.pipeline_ref === candidate.pipeline.revision && plan.toolchain === candidate.toolchain.requested,
-    "candidate differs from the approved release plan"
-  );
-}
-function dependencyNames(plan, name) {
-  const names = /* @__PURE__ */ new Set();
-  function visit(name2) {
-    const pkg = plan.packages.find((p) => p.name === name2);
-    requireThat(pkg, "package is absent from the release plan");
-    for (const dep of pkg.needs) if (!names.has(dep)) {
-      names.add(dep);
-      visit(dep);
-    }
-  }
-  visit(name);
-  return [...names].sort();
-}
-async function planRelease(options) {
-  const source = realpathSync2(options.source);
-  valid(REPO, options.repository, "repository");
-  valid(SHA, options.commit, "commit");
-  valid(SHA, options.pipelineRef, "pipeline revision");
-  valid(TOOLCHAIN, options.toolchain, "toolchain");
-  const manifest = within(source, options.manifest);
-  requireThat(basename(manifest) === "Cargo.toml", "manifest must end in Cargo.toml");
-  requireThat(await run(["git", "rev-parse", "HEAD"], { cwd: source }) === options.commit, "checkout differs from release commit");
-  requireThat(!await run(["git", "status", "--porcelain", "--untracked-files=all"], { cwd: source }), "source checkout is dirty");
-  if (options.baseBranch) {
-    await run(["git", "check-ref-format", `refs/heads/${options.baseBranch}`], { cwd: source });
-    await run(["git", "merge-base", "--is-ancestor", options.commit, `refs/remotes/origin/${options.baseBranch}`], { cwd: source });
-  }
-  const packages = await temporary("zrelease-plan-", async (work) => {
-    const env = cargoEnvironment(join7(work, "cargo-home"), join7(work, "target"));
-    const raw = await run(["cargo", `+${options.toolchain}`, "metadata", "--no-deps", "--locked", "--format-version", "1", "--manifest-path", manifest], { cwd: source, env });
-    return graph(JSON.parse(raw), options.workspace ? void 0 : options.members.map((p) => p.name));
-  });
-  const expected = options.members.map((p) => ({ name: p.name, needs: [...p.needs].sort() })).sort((a, b) => a.name.localeCompare(b.name));
-  const actual = packages.map(({ name, needs }) => ({ name, needs })).sort((a, b) => a.name.localeCompare(b.name));
-  requireThat(canonical(expected).equals(canonical(actual)), "workspace dependencies changed; regenerate the release workflow");
-  if (options.publishing) {
-    requireThat(options.ref.startsWith(`refs/tags/${options.tagPrefix}`), "publication requires a release tag");
-    if (packages.length === 1) requireThat(options.ref === `refs/tags/${options.tagPrefix}${packages[0].version}`, "single-crate release requires an exact version tag");
-    await run(["git", "check-ref-format", options.ref], { cwd: source });
-    requireThat(await run(["git", "rev-parse", `${options.ref}^{commit}`], { cwd: source }) === options.commit, "release tag differs from source commit");
-  }
-  const plan = {
-    schema: "zrelease.plan/v1",
-    source: { repository: options.repository, commit: options.commit, ref: options.ref },
-    pipeline_ref: options.pipelineRef,
-    toolchain: options.toolchain,
-    manifest: options.manifest,
-    publishing: options.publishing,
-    packages
-  };
-  writeJson(options.out, plan);
-  const sha = digest(readFileSync3(options.out));
-  output({ plan_sha256: sha });
-  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync3(
+// src/workspace-rehearsal.ts
+async function rehearseWorkspace(bundle, out, track, protocol = rehearse) {
+  mkdirSync8(out, { recursive: true });
+  const completed = [];
+  const api = () => new Deployments(bundle.plan.source.repository, process.env.GITHUB_TOKEN ?? "");
+  const runUrl = `https://github.com/${bundle.plan.source.repository}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync4(
     process.env.GITHUB_STEP_SUMMARY,
-    `## Release
-
-Commit: \`${options.commit}\`
-
-Plan: \`${sha}\`
-
-| Crate | Version | After |
-| --- | --- | --- |
-` + packages.map((p) => `| ${p.name} | ${p.version} | ${p.needs.join(", ") || "\u2014"} |`).join("\n") + "\n\n" + (options.publishing ? "Approve this release once in the release environment. Crates publish and verify in dependency order.\n" : "Rehearsal only; nothing will be published.\n")
+    "## Workspace rehearsal\n\nNothing is published to crates.io.\n\n| Crate | Version | Outcome |\n| --- | --- | --- |\n"
   );
-  return plan;
-}
-
-// src/prepare.ts
-async function prepare(options) {
-  const source = realpathSync3(options.source), outputDir = resolve2(options.outputDir);
-  const { package: name, toolchain, repository, commit, ref, pipelineRef } = options;
-  const { manifest = "Cargo.toml", publishing = false, tagPrefix = "v", baseBranch = "main", smoke = "", features = [], defaultFeatures = true } = options;
-  valid(NAME, name, "package");
-  valid(TOOLCHAIN, toolchain, "pinned Rust toolchain");
-  valid(REPO, repository, "repository");
-  valid(SHA, commit, "commit");
-  valid(SHA, pipelineRef, "pipeline revision");
-  requireThat(!existsSync2(outputDir), "capsule output directory already exists");
-  requireThat(!inside(source, outputDir), "capsule output must be outside the source checkout");
-  const path = within(source, manifest);
-  requireThat(basename2(path) === "Cargo.toml", "manifest path must end in Cargo.toml");
-  requireThat(await run(["git", "rev-parse", "HEAD"], { cwd: source }) === commit, "checkout does not match the triggering commit");
-  requireThat(!await run(["git", "status", "--porcelain", "--untracked-files=all"], { cwd: source }), "source checkout is dirty");
-  if (baseBranch) {
-    await run(["git", "check-ref-format", `refs/heads/${baseBranch}`], { cwd: source });
-    await run(["git", "merge-base", "--is-ancestor", commit, `refs/remotes/origin/${baseBranch}`], { cwd: source });
-  }
-  requireThat(Array.isArray(features) && features.every((f) => typeof f === "string" && f && !/[\n\r, ]/.test(f)), "features must be an array of nonempty individual feature names");
-  const staging = await stagingRegistry(publishing ? [] : options.dependencies);
-  try {
-    const candidate = await temporary("zrelease-prepare-", async (work) => {
-      const env = cargoEnvironment(join8(work, "cargo-home"), join8(work, "target"));
-      if (!publishing && options.dependencies?.length) staging.configure(env.CARGO_HOME);
-      const cargo = ["cargo", `+${toolchain}`];
-      const rustc = await run(["rustc", `+${toolchain}`, "--version", "--verbose"], { cwd: work, env });
-      const cargoVersion = await run([...cargo, "--version"], { cwd: work, env });
-      const raw = await run([...cargo, "metadata", "--no-deps", "--locked", "--format-version", "1", "--manifest-path", path], { cwd: source, env });
-      const metadata = record(JSON.parse(raw));
-      requireThat(Array.isArray(metadata.workspace_members) && Array.isArray(metadata.packages), "invalid Cargo workspace metadata");
-      const members = new Set(metadata.workspace_members);
-      const selected = metadata.packages.map((p) => record(p)).filter((p) => p.name === name && members.has(p.id));
-      requireThat(selected.length === 1, "package must select exactly one workspace member");
-      const pkg = selected[0];
-      const vers = version(pkg.version);
-      requireThat(Array.isArray(pkg.targets) && pkg.targets.some((t) => {
-        const target = record(t);
-        return Array.isArray(target.kind) && target.kind.some((k) => ["lib", "rlib", "proc-macro"].includes(k));
-      }), "this pipeline supports library crates, not binary-only packages");
-      requireThat(pkg.publish === null || Array.isArray(pkg.publish) && pkg.publish.length === 1 && pkg.publish[0] === "crates-io", "selected package forbids publication to crates.io");
-      if (publishing && !options.plan) {
-        requireThat(ref === `refs/tags/${tagPrefix}${vers}`, "live publication requires a tag that exactly matches the package version");
-        requireThat(await run(["git", "rev-parse", `${ref}^{commit}`], { cwd: source }) === commit, "release tag does not resolve to the triggering commit");
-      }
-      const flags = defaultFeatures ? [] : ["--no-default-features"];
-      if (features.length) flags.push("--features", features.join(","));
-      const checks = [];
-      for (const command of ["test", "package"]) {
-        const argv2 = [...cargo, command, "--locked", "--manifest-path", path, "--package", name, ...flags];
-        await run(argv2, { cwd: source, env });
-        checks.push({ argv: argv2, exit_code: 0 });
-      }
-      const crate = readFileSync4(join8(work, "target", "package", `${name}-${vers}.crate`));
-      const files = await archiveFiles(crate, name, vers);
-      const publishMetadata = normalizedMetadata(files, name, vers);
-      const vcsBytes = files.get(".cargo_vcs_info.json");
-      if (vcsBytes) {
-        const git = record(record(JSON.parse(utf8(vcsBytes))).git);
-        requireThat(git.sha1 === commit, "archive VCS revision does not match candidate source");
-        requireThat(!git.dirty, "archive records a dirty source checkout");
-      }
-      requireThat(canonical(publishMetadata.features).equals(canonical(pkg.features)), "feature translation disagrees with cargo metadata; stop rather than publish");
-      const unpacked = join8(work, "unpacked");
-      extractFiles(files, unpacked);
-      const archiveEnv = cargoEnvironment(join8(work, "archive-cargo-home"), join8(work, "archive-target"));
-      if (!publishing && options.dependencies?.length) staging.configure(archiveEnv.CARGO_HOME);
-      const argv = [...cargo, "test", "--locked", ...flags];
-      await run(argv, { cwd: unpacked, env: archiveEnv });
-      checks.push({ argv, scope: "exact packaged archive", exit_code: 0 });
-      requireThat(!await run(["git", "status", "--porcelain", "--untracked-files=all"], { cwd: source }), "qualification modified the source checkout");
-      requireThat(await run(["git", "rev-parse", "HEAD"], { cwd: source }) === commit, "qualification changed the checked-out revision");
-      const smokeBytes = smoke ? readFileSync4(within(source, smoke)) : Buffer.from("extern crate subject;\nfn main() {}\n");
-      requireThat(smokeBytes.length <= 256 * 1024, "consumer smoke source is too large");
-      utf8(smokeBytes);
-      mkdirSync6(outputDir, { recursive: true });
-      const payloads = { "package.crate": crate, "publish.json": canonical(publishMetadata), "smoke.rs": smokeBytes };
-      for (const [filename, data] of Object.entries(payloads)) writeFileSync5(join8(outputDir, filename), data);
-      const result = {
-        schema: SCHEMA,
-        created_at: utcNow(),
-        package: { name, version: vers },
-        source: { repository, commit, ref },
-        ...options.plan ? { release_plan_sha256: digest(canonical(options.plan)) } : {},
-        pipeline: { repository: "zsumz/zrelease", revision: pipelineRef },
-        toolchain: { requested: toolchain, rustc, cargo: cargoVersion },
-        consumer: { features, default_features: defaultFeatures },
-        qualification: { checks, note: "The caller must additionally gate its domain-specific canonical CI." },
-        files: Object.fromEntries(Object.entries(payloads).map(([k, v]) => [k, { sha256: digest(v), size: v.length }]))
-      };
-      if (options.plan) {
-        bindCandidate(options.plan, result);
-        requireThat(options.plan.publishing === publishing, "release plan publish mode mismatch");
-      }
-      staging.add({ candidate: result, crate, metadata: payloads["publish.json"], smoke: smokeBytes });
-      await runConsumer(result, outputDir, staging.configure);
-      requireThat(!await run(["git", "status", "--porcelain", "--untracked-files=all"], { cwd: source }), "consumer modified the source checkout");
-      requireThat(await run(["git", "rev-parse", "HEAD"], { cwd: source }) === commit, "consumer changed the checked-out revision");
-      for (const [filename, data] of Object.entries(payloads)) requireThat(readFileSync4(join8(outputDir, filename)).equals(data), "consumer modified a sealed payload");
-      for (const command of ["build", "test", "run"]) checks.push({ argv: [...cargo, command, "--locked"], scope: "fresh consumer against exact staged archives", exit_code: 0 });
-      writeJson(join8(outputDir, "candidate.json"), result);
-      return result;
-    });
-    const sha = digest(readFileSync4(join8(outputDir, "candidate.json")));
-    output({ candidate_sha256: sha, crate_sha256: candidate.files["package.crate"].sha256, version: candidate.package.version, package: name });
-    console.log(`Candidate SHA-256: ${sha}`);
-    return candidate;
-  } finally {
-    await staging.close();
-  }
-}
-
-// src/cli.ts
-var commands = ["plan", "prepare", "check", "upload", "observe", "consumer", "rehearse", "begin", "finish"];
-var services = { registry: () => new Registry(), deployments: (repo, token) => new Deployments(repo, token) };
-async function execute(argv, dependencies = services) {
-  const [command, ...args] = argv;
-  if (command === "--help" || command === "-h") {
-    console.log("Qualify, deploy, and verify a Rust library release.\nCommands: " + commands.join(", "));
-    return;
-  }
-  requireThat(command && commands.includes(command), "a valid command is required; use --help");
-  const options = { help: { type: "boolean", short: "h" } };
-  const required = [];
-  function field(name, fallback, mandatory = false) {
-    options[name] = { type: "string", ...fallback === void 0 ? {} : { default: fallback } };
-    if (mandatory) required.push(name);
-  }
-  function flag(name) {
-    options[name] = { type: "boolean", default: false };
-  }
-  if (["plan", "prepare"].includes(command)) {
-    for (const key of ["source", "toolchain", "repository", "commit", "ref", "pipeline-ref", "out"]) field(key, void 0, true);
-    field("manifest", "Cargo.toml");
-    field("tag-prefix", "v");
-    field("base-branch", "main");
-    field("smoke", "");
-    field("features-json", "[]");
-    flag("publishing");
-    flag("no-default-features");
-    if (command === "plan") {
-      field("members-json", void 0, true);
-      flag("workspace");
-    } else {
-      field("package", void 0, true);
-      field("dependencies");
-      field("dependency-shas", "[]");
-    }
-  } else {
-    field("capsule", void 0, true);
-    field("candidate-sha", void 0, true);
-    field("repository", process.env.GITHUB_REPOSITORY);
-    field("commit", process.env.GITHUB_SHA);
-    field("pipeline-ref", process.env.PIPELINE_REF);
-    field("package");
-    if (["upload", "observe", "rehearse", "finish", "consumer"].includes(command)) field("out", void 0, true);
-    if (command === "upload") {
-      flag("confirm-publish");
-      field("tag-prefix", "v");
-    }
-    if (["begin", "finish"].includes(command)) {
-      flag("production");
-      field("run-url", void 0, true);
-    }
-    if (command === "finish") {
-      field("deployment-id", void 0, true);
-      field("results-json", void 0, true);
-      field("reports");
-    }
-  }
-  if (["prepare", "upload", "check"].includes(command)) {
-    field("plan");
-    field("plan-sha");
-  }
-  const { values } = parseArgs({ args, options, strict: true, allowPositionals: false });
-  if (values.help) {
-    console.log(`zrelease ${command}
-` + Object.keys(options).map((k) => `  --${k}${required.includes(k) ? " (required)" : ""}`).join("\n"));
-    return;
-  }
-  for (const key of required) requireThat(typeof values[key] === "string" && values[key] !== "", `--${key} is required`);
-  const text = (key) => values[key];
-  const maybe = (key) => values[key];
-  const yes = (key) => values[key] === true;
-  const bindings = { repository: maybe("repository"), commit: maybe("commit"), pipelineRef: maybe("pipeline-ref") };
-  requireThat(Boolean(values.plan) === Boolean(values["plan-sha"]), "--plan and --plan-sha must be provided together");
-  const release = values.plan ? readPlan(text("plan"), text("plan-sha"), bindings) : void 0;
-  if (command === "plan") {
-    const raw = JSON.parse(text("members-json"));
-    requireThat(Array.isArray(raw), "members-json must be an array");
-    await planRelease({
-      source: text("source"),
-      manifest: text("manifest"),
-      toolchain: text("toolchain"),
-      repository: text("repository"),
-      commit: text("commit"),
-      ref: text("ref"),
-      pipelineRef: text("pipeline-ref"),
-      publishing: yes("publishing"),
-      baseBranch: text("base-branch"),
-      tagPrefix: text("tag-prefix"),
-      out: text("out"),
-      workspace: yes("workspace"),
-      members: raw.map((value) => {
-        const p = record(value);
-        requireThat(typeof p.name === "string", "member name is required");
-        return { name: p.name, needs: strings(p.needs, "member dependencies") };
-      })
-    });
-    return;
-  }
-  if (command === "prepare") {
-    const hashes = strings(JSON.parse(text("dependency-shas")), "dependency candidate digests");
-    requireThat(values.dependencies || hashes.length === 0, "dependency artifacts are required");
-    const siblings = values.dependencies ? await loadDependencies(text("dependencies"), hashes, bindings) : [];
-    if (release) {
-      requireThat(canonical(siblings.map((s) => s.candidate.package.name).sort()).equals(canonical(dependencyNames(release, text("package")))), "dependency artifacts differ from the approved release plan");
-      for (const sibling of siblings) {
-        bindCandidate(release, sibling.candidate);
-        requireThat(sibling.candidate.release_plan_sha256 === text("plan-sha"), "dependency belongs to another release plan");
-      }
-    }
-    await prepare({
-      source: text("source"),
-      manifest: text("manifest"),
-      package: text("package"),
-      toolchain: text("toolchain"),
-      repository: text("repository"),
-      commit: text("commit"),
-      ref: text("ref"),
-      pipelineRef: text("pipeline-ref"),
-      outputDir: text("out"),
-      publishing: yes("publishing"),
-      tagPrefix: text("tag-prefix"),
-      baseBranch: text("base-branch"),
-      smoke: text("smoke"),
-      features: strings(JSON.parse(text("features-json")), "features-json array"),
-      defaultFeatures: !yes("no-default-features"),
-      plan: release,
-      dependencies: siblings
-    });
-    return;
-  }
-  const { candidate, crate, metadata } = await load(text("capsule"), text("candidate-sha"), {
-    repository: maybe("repository"),
-    commit: maybe("commit"),
-    package: maybe("package"),
-    pipelineRef: maybe("pipeline-ref")
-  });
-  if (release) {
-    bindCandidate(release, candidate);
-    requireThat(candidate.release_plan_sha256 === text("plan-sha"), "candidate is not bound to this release plan");
-  }
-  const api = () => dependencies.deployments(candidate.source.repository, process.env.GITHUB_TOKEN ?? "");
-  switch (command) {
-    case "check":
-      console.log(JSON.stringify(candidate, null, 2));
-      break;
-    case "upload": {
-      requireThat(yes("confirm-publish"), "live publishing requires --confirm-publish");
-      requireThat(process.env.GITHUB_ACTIONS === "true", "live publishing is restricted to GitHub Actions; use rehearse locally");
-      requireThat(["push", "workflow_dispatch"].includes(process.env.GITHUB_EVENT_NAME ?? ""), "this GitHub event cannot publish");
-      requireThat(!candidate.release_plan_sha256 || release, "approved release plan is required");
-      if (release) requireThat(release.publishing && release.source.ref.startsWith("refs/tags/"), "release plan does not authorize publication");
-      const expectedRef = release?.source.ref ?? `refs/tags/${text("tag-prefix")}${candidate.package.version}`;
-      requireThat(candidate.source.ref === expectedRef && process.env.GITHUB_REF === expectedRef, "publishing requires the exact version tag");
-      writeJson(text("out"), { ...await dependencies.registry().publish(candidate, crate, metadata, process.env.CARGO_REGISTRY_TOKEN ?? ""), candidate_sha256: text("candidate-sha") });
-      break;
-    }
-    case "observe":
-      writeJson(text("out"), await dependencies.registry().observe(candidate.package.name, candidate.package.version, candidate.files["package.crate"].sha256));
-      break;
-    case "consumer":
-      await verifyConsumer(candidate, text("capsule"), text("out"), text("candidate-sha"));
-      break;
-    case "rehearse":
-      writeJson(text("out"), { ...await rehearse(candidate, crate, metadata), candidate_sha256: text("candidate-sha") });
-      break;
-    case "begin":
-      await api().begin(candidate, text("candidate-sha"), text("run-url"), yes("production"));
-      break;
-    case "finish":
-      await finish(candidate, {
-        candidateSha: text("candidate-sha"),
-        production: yes("production"),
-        deploymentId: Number(text("deployment-id")),
-        runUrl: text("run-url"),
-        resultsJson: text("results-json"),
-        reports: maybe("reports"),
-        out: text("out")
+  for (let i = 0; i < bundle.capsules.length; i++) {
+    const capsule = bundle.capsules[i];
+    const { candidate, crate, metadata } = capsule;
+    const candidateSha = bundle.index.packages[i].sha256;
+    const name = candidate.package.name;
+    const reports = join10(out, name);
+    mkdirSync8(reports, { recursive: true });
+    console.log(`::group::Rehearse ${name} ${candidate.package.version}`);
+    let deploymentId;
+    try {
+      if (track) deploymentId = await api().begin(candidate, candidateSha, runUrl, false);
+      writeJson(join10(reports, "rehearsal.json"), { ...await protocol(candidate, crate, metadata), candidate_sha256: candidateSha });
+      if (deploymentId) await finish(candidate, {
+        candidateSha,
+        production: false,
+        deploymentId,
+        runUrl,
+        reports,
+        summary: false,
+        resultsJson: JSON.stringify({ qualify: "success", track: "success", rehearse: "success" }),
+        out: join10(reports, "release.json")
       }, api);
-      break;
+      completed.push(name);
+      writeJson(join10(out, "workspace-rehearsal.json"), {
+        schema: "zrelease.workspace-rehearsal/v1",
+        published: false,
+        source: bundle.plan.source,
+        completed,
+        state: completed.length === bundle.capsules.length ? "rehearsed" : "in-progress"
+      });
+      if (process.env.GITHUB_STEP_SUMMARY) appendFileSync4(
+        process.env.GITHUB_STEP_SUMMARY,
+        `| ${name} | ${candidate.package.version} | Rehearsed |
+`
+      );
+    } catch (error) {
+      writeJson(join10(out, "workspace-rehearsal.json"), {
+        schema: "zrelease.workspace-rehearsal/v1",
+        published: false,
+        source: bundle.plan.source,
+        completed,
+        failed: name,
+        state: "failed"
+      });
+      if (process.env.GITHUB_STEP_SUMMARY) appendFileSync4(
+        process.env.GITHUB_STEP_SUMMARY,
+        `| ${name} | ${candidate.package.version} | Failed; later crates stopped |
+`
+      );
+      if (deploymentId) await finish(candidate, {
+        candidateSha,
+        production: false,
+        deploymentId,
+        runUrl,
+        reports,
+        summary: false,
+        resultsJson: JSON.stringify({ qualify: "success", track: "success", rehearse: "failure" }),
+        out: join10(reports, "release.json")
+      }, api);
+      throw error;
+    } finally {
+      console.log("::endgroup::");
+    }
   }
 }
-async function main(argv = process.argv.slice(2), dependencies = services) {
+
+// src/workspace-cli.ts
+async function main(args = process.argv.slice(2)) {
   try {
-    await execute(argv, dependencies);
+    const [command, ...rest] = args;
+    requireThat(["prepare", "check", "rehearse"].includes(command ?? ""), "workspace supports prepare, check and rehearse only");
+    const { values } = parseArgs({ args: rest, options: {
+      source: { type: "string" },
+      out: { type: "string" },
+      bundle: { type: "string" },
+      sha: { type: "string" },
+      toolchain: { type: "string" },
+      repository: { type: "string", default: process.env.GITHUB_REPOSITORY },
+      commit: { type: "string", default: process.env.GITHUB_SHA },
+      ref: { type: "string", default: process.env.GITHUB_REF },
+      "pipeline-ref": { type: "string", default: process.env.PIPELINE_REF },
+      "base-branch": { type: "string", default: "main" },
+      manifest: { type: "string", default: "Cargo.toml" },
+      "tag-prefix": { type: "string", default: "v" },
+      "members-json": { type: "string" },
+      workspace: { type: "boolean" },
+      "smokes-json": { type: "string", default: "{}" },
+      track: { type: "boolean", default: false }
+    } });
+    const text = (key) => {
+      const value = values[key];
+      requireThat(typeof value === "string" && value !== "", `--${key} is required`);
+      return value;
+    };
+    if (command === "prepare") {
+      const members = JSON.parse(text("members-json"));
+      requireThat(Array.isArray(members), "members-json must be an array");
+      const rawSmokes = record(JSON.parse(text("smokes-json")));
+      const smokes = Object.fromEntries(Object.entries(rawSmokes).map(([name, value]) => {
+        requireThat(typeof value === "string", "smoke sources must be paths");
+        return [name, value];
+      }));
+      await prepareWorkspace({
+        source: text("source"),
+        out: text("out"),
+        toolchain: text("toolchain"),
+        repository: text("repository"),
+        commit: text("commit"),
+        ref: text("ref"),
+        pipelineRef: text("pipeline-ref"),
+        baseBranch: values["base-branch"] ?? "main",
+        manifest: text("manifest"),
+        tagPrefix: text("tag-prefix"),
+        workspace: values.workspace,
+        smokes,
+        members: members.map((value) => {
+          const pkg = record(value);
+          requireThat(typeof pkg.name === "string", "member name required");
+          return { name: pkg.name, needs: strings(pkg.needs, "dependencies") };
+        })
+      });
+    } else {
+      const bundle = await loadWorkspace(text("bundle"), text("sha"), {
+        repository: values.repository,
+        commit: values.commit,
+        pipelineRef: values["pipeline-ref"]
+      });
+      if (command === "rehearse") await rehearseWorkspace(bundle, text("out"), values.track === true);
+      else console.log(`Verified ${bundle.capsules.length} workspace candidates.`);
+    }
     return 0;
   } catch (error) {
-    console.error(`zrelease: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`workspace: ${error instanceof Error ? error.message : String(error)}`);
     return 2;
   }
 }
-if (process.argv[1] && resolve3(process.argv[1]) === fileURLToPath(import.meta.url)) process.exitCode = await main();
+if (process.argv[1] && resolve4(process.argv[1]) === fileURLToPath(import.meta.url)) process.exitCode = await main();
 export {
-  execute,
   main
 };
 /*! Bundled license information:

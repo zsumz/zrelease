@@ -38,11 +38,36 @@ export function render(sha: string, selected: string | Member[], toolchain: stri
   requireThat(!text.includes('@@'), 'unresolved workflow template placeholder');
   return text;
 }
+export function renderRehearsal(sha: string, selected: string | Member[], toolchain: string, manifest = 'Cargo.toml', workspace = false): string {
+  render(sha, selected, toolchain, manifest, workspace); // Share validation with publishing callers.
+  const members = typeof selected === 'string' ? [{ name: selected, needs: [] }] : selected;
+  return `# Add your canonical CI to rehearsal.needs. Regenerate when crate dependencies change.
+name: Rehearse
+'on':
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rehearsal:
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      deployments: write
+    uses: zsumz/zrelease/.github/workflows/rehearse.yml@${sha}
+    with:
+      members: '${JSON.stringify(members)}'
+      workspace: ${workspace}
+      pipeline-ref: '${sha}'
+      toolchain: '${toolchain}'
+      manifest-path: '${manifest}'
+`;
+}
 export function main(args = process.argv.slice(2)): number {
   try {
     const { values } = parseArgs({ args, options: { sha: { type: 'string' }, package: { type: 'string', multiple: true }, toolchain: { type: 'string' },
-      source: { type: 'string' }, workspace: { type: 'boolean' }, manifest: { type: 'string', default: 'Cargo.toml' }, out: { type: 'string' }, help: { type: 'boolean', short: 'h' } } });
-    if (values.help) { console.log('install --sha SHA --toolchain VERSION --out FILE (--package NAME | --source DIR --workspace) [--manifest Cargo.toml]\nRepeat --package to select several workspace members; use --source to discover their dependencies.'); return 0; }
+      source: { type: 'string' }, rehearsal: { type: 'boolean' }, workspace: { type: 'boolean' }, manifest: { type: 'string', default: 'Cargo.toml' }, out: { type: 'string' }, help: { type: 'boolean', short: 'h' } } });
+    if (values.help) { console.log('install --sha SHA --toolchain VERSION --out FILE (--package NAME | --source DIR --workspace) [--manifest Cargo.toml] [--rehearsal]\nUse --rehearsal for a compact workspace practice workflow.\nRepeat --package to select several workspace members; use --source to discover their dependencies.'); return 0; }
     requireThat(values.sha && values.toolchain && values.out && (values.package?.length || values.workspace), '--sha, --toolchain, --out and --package or --workspace are required');
     requireThat(!values.workspace || (values.source && !values.package), '--workspace requires --source and cannot be combined with --package');
     requireThat(values.source || values.package?.length === 1, 'multiple crates require --source for dependency discovery');
@@ -54,7 +79,7 @@ export function main(args = process.argv.slice(2)): number {
       requireThat(result.status === 0, 'cannot discover Cargo workspace: ' + (result.error?.message ?? result.stderr));
       members = graph(JSON.parse(result.stdout), values.workspace ? undefined : values.package).map(({ name, needs }) => ({ name, needs }));
     }
-    const text = render(values.sha, members, values.toolchain, values.manifest, values.workspace);
+    const text = (values.rehearsal ? renderRehearsal : render)(values.sha, members, values.toolchain, values.manifest, values.workspace);
     mkdirSync(dirname(values.out), { recursive: true });
     writeFileSync(values.out, text, { flag: 'wx' });
     console.log(`Created ${values.out}. Rehearsal is the default; nothing was published.`); return 0;

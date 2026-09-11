@@ -29,7 +29,25 @@ Create two GitHub environments:
 - `release`: required reviewers. Allow self-review if you start releases.
 - `crates.io`: release tags only, **no required reviewers**.
 
-Run **Actions → Release** with `publish: false` to rehearse, including unpublished siblings. No approval needed.
+For a compact practice graph, generate a separate rehearsal caller:
+
+```sh
+node dist/install.mjs \
+  --sha "$(git rev-parse HEAD)" \
+  --source ../my-project --workspace --rehearsal \
+  --toolchain 1.96.0 \
+  --out ../my-project/.github/workflows/rehearse.yml
+```
+
+Make `rehearsal` depend on your canonical CI. Run **Actions → Rehearse**.
+The graph has three stages: **Package workspace → Attest → Rehearse**.
+Crates are tested, packaged and consumed in dependency order, including unpublished
+siblings. Per-crate progress appears in grouped logs and individual receipts;
+failures stop the remaining work. No approval or crates.io credentials are used.
+Use the `smoke-sources` JSON input to map crate names to consumer source paths.
+
+The original Release caller also accepts `publish: false`. Its publishing path
+keeps separate jobs for package execution and credentials.
 
 To publish, dispatch a tag with `publish: true`, review the plan, then **Review deployments → Approve and deploy** once.
 

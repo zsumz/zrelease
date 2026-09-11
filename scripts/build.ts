@@ -6,7 +6,7 @@ import { requireThat } from '../src/common.ts';
 
 const root = resolve(import.meta.dirname, '..');
 const check = process.argv.includes('--check');
-const result = await build({ absWorkingDir: root, entryPoints: { zrelease: 'src/cli.ts', install: 'scripts/install.ts' },
+const result = await build({ absWorkingDir: root, entryPoints: { zrelease: 'src/cli.ts', workspace: 'src/workspace-cli.ts', install: 'scripts/install.ts' },
   outdir: 'dist', outExtension: { '.js': '.mjs' }, bundle: true, platform: 'node', format: 'esm', target: 'node24',
   banner: { js: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);' },
   legalComments: 'eof', sourcemap: false, metafile: true, write: false });

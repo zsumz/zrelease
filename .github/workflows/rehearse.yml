@@ -1,0 +1,195 @@
+name: Workspace rehearsal
+'on':
+  workflow_call:
+    inputs:
+      members:
+        type: string
+        required: true
+      workspace:
+        type: boolean
+        default: false
+      pipeline-ref:
+        type: string
+        required: true
+      toolchain:
+        type: string
+        required: true
+      manifest-path:
+        type: string
+        default: Cargo.toml
+      base-branch:
+        type: string
+        default: main
+      smoke-sources:
+        type: string
+        default: '{}'
+        description: JSON object mapping crate names to checked-in Rust consumer sources.
+permissions:
+  contents: read
+concurrency:
+  group: zrelease-rehearsal-${{ github.repository }}
+  cancel-in-progress: false
+env:
+  PIPELINE_REF: ${{ inputs.pipeline-ref }}
+  CARGO_TERM_COLOR: never
+defaults:
+  run:
+    shell: bash
+jobs:
+  package:
+    name: Package workspace
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    outputs:
+      artifact-id: ${{ steps.artifact.outputs.artifact-id }}
+      workspace-sha: ${{ steps.prepare.outputs.workspace_sha256 }}
+    steps:
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24.19.0'
+          package-manager-cache: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: zsumz/zrelease
+          ref: ${{ inputs.pipeline-ref }}
+          path: .pipeline
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          path: .source
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install exact Rust
+        run: |
+          [[ "$PIPELINE_REF" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "$TOOLCHAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          rustup toolchain install "$TOOLCHAIN" --profile minimal
+        env:
+          TOOLCHAIN: ${{ inputs.toolchain }}
+      - name: Test source, archives and fresh consumers in dependency order
+        id: prepare
+        run: |
+          flags=()
+          [[ "$WORKSPACE" == true ]] && flags+=(--workspace)
+          node .pipeline/dist/workspace.mjs prepare \
+            --source .source --out "$RUNNER_TEMP/workspace" \
+            --members-json "$MEMBERS" --toolchain "$TOOLCHAIN" \
+            --manifest "$MANIFEST" --base-branch "$BASE_BRANCH" \
+            --smokes-json "$SMOKES" "${flags[@]}"
+        env:
+          MEMBERS: ${{ inputs.members }}
+          WORKSPACE: ${{ inputs.workspace }}
+          TOOLCHAIN: ${{ inputs.toolchain }}
+          MANIFEST: ${{ inputs.manifest-path }}
+          BASE_BRANCH: ${{ inputs.base-branch }}
+          SMOKES: ${{ inputs.smoke-sources }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        id: artifact
+        with:
+          name: workspace-candidates-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/workspace
+          if-no-files-found: error
+          retention-days: 90
+  attest:
+    name: Attest
+    needs: [package]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    outputs:
+      artifact-id: ${{ steps.artifact.outputs.artifact-id }}
+    env:
+      WORKSPACE_SHA: ${{ needs.package.outputs.workspace-sha }}
+    steps:
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24.19.0'
+          package-manager-cache: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: zsumz/zrelease
+          ref: ${{ inputs.pipeline-ref }}
+          path: .pipeline
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: ${{ needs.package.outputs.artifact-id }}
+          path: ${{ runner.temp }}/workspace
+          merge-multiple: true
+      - name: Verify the sealed workspace
+        run: node .pipeline/dist/workspace.mjs check --bundle "$RUNNER_TEMP/workspace" --sha "$WORKSPACE_SHA"
+      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+        id: provenance
+        with:
+          subject-path: ${{ runner.temp }}/workspace/workspace.json
+      - name: Preserve verification bundle
+        run: |
+          mkdir -p "$RUNNER_TEMP/attestation"
+          cp "$BUNDLE" "$RUNNER_TEMP/attestation/bundle.jsonl"
+        env:
+          BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        id: artifact
+        with:
+          name: workspace-attestation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/attestation
+          if-no-files-found: error
+          retention-days: 90
+  rehearse:
+    name: Rehearse
+    needs: [package, attest]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      attestations: read
+      deployments: write
+    env:
+      WORKSPACE_SHA: ${{ needs.package.outputs.workspace-sha }}
+    steps:
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24.19.0'
+          package-manager-cache: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: zsumz/zrelease
+          ref: ${{ inputs.pipeline-ref }}
+          path: .pipeline
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: ${{ needs.package.outputs.artifact-id }}
+          path: ${{ runner.temp }}/workspace
+          merge-multiple: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: ${{ needs.attest.outputs.artifact-id }}
+          path: ${{ runner.temp }}/attestation
+          merge-multiple: true
+      - name: Verify exact source and pipeline attestation
+        run: |
+          gh attestation verify "$RUNNER_TEMP/workspace/workspace.json" \
+            --bundle "$RUNNER_TEMP/attestation/bundle.jsonl" --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow zsumz/zrelease/.github/workflows/rehearse.yml \
+            --signer-digest "$PIPELINE_REF" --source-digest "$GITHUB_SHA" \
+            --source-ref "$GITHUB_REF" --deny-self-hosted-runners
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Rehearse crates and record receipts in dependency order
+        run: node .pipeline/dist/workspace.mjs rehearse --bundle "$RUNNER_TEMP/workspace" --sha "$WORKSPACE_SHA" --out "$RUNNER_TEMP/receipts" --track
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: workspace-rehearsal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/receipts
+          if-no-files-found: warn
+          retention-days: 90

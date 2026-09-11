@@ -7,7 +7,7 @@ import type { Candidate, JobResult } from './types.ts';
 
 export interface FinishOptions {
   candidateSha: string; production: boolean; deploymentId: number; runUrl: string;
-  resultsJson: string; reports?: string; out: string;
+  resultsJson: string; reports?: string; out: string; summary?: boolean;
 }
 function verifiedEvidence(candidate: Candidate, candidateSha: string, observations: Record<string, unknown>, production: boolean): boolean {
   try {
@@ -73,7 +73,7 @@ export async function finish(candidate: Candidate, options: FinishOptions, api: 
   const url = production ? `https://crates.io/crates/${name}/${version}` : runUrl;
   await api().status(deploymentId, status, runUrl, url, `${name} ${version}: ${phase}` + (production ? '' : '; nothing published'));
   output({ deployment_status: status, phase });
-  if (process.env.GITHUB_STEP_SUMMARY) {
+  if (process.env.GITHUB_STEP_SUMMARY && options.summary !== false) {
     const message = status === 'success' && production ? 'Registry delivery and consumer checks completed.\n'
       : !production ? 'This was a rehearsal; no package was published.\n'
       : 'Delivery needs investigation. A failed workflow does not undo a registry write.\n';

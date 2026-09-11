@@ -8,7 +8,7 @@ import { runConsumer } from '../src/consumer.ts';
 import { registryServer } from '../src/mock.ts';
 import { graph } from '../src/plan.ts';
 import { run } from '../src/process.ts';
-import { render } from './install.ts';
+import { render, renderRehearsal } from './install.ts';
 import { fixtureSource } from './fixture-source.ts';
 
 const root = resolve(import.meta.dirname, '..');
@@ -62,5 +62,17 @@ await fixtureSource(resolve(values.source!), local, async (source, commit) => {
     requireThat(registry.state.puts === packages.length, 'duplicate workspace upload');
     writeJson(join(out, 'result.json'), { state: 'passed', completed, uploads: registry.state.puts, published: false });
   } finally { await registry.close(); }
+  const workspaceCli = [process.execPath, join(root, 'dist/workspace.mjs')];
+  const compact = join(out, 'compact');
+  const smokes = Object.fromEntries(packages.filter(p => p.name.endsWith('facade') || p.name.endsWith('alias'))
+    .map(p => [p.name, 'fixtures/workspace/smoke.rs']));
+  await run([...workspaceCli, 'prepare', ...context, '--members-json', JSON.stringify(members), '--workspace',
+    '--smokes-json', JSON.stringify(smokes), '--out', compact], { cwd: local, env });
+  const sha = digest(readFileSync(join(compact, 'workspace.json')));
+  await run([...workspaceCli, 'check', '--bundle', compact, '--sha', sha], { cwd: local, env });
+  await run([...workspaceCli, 'rehearse', '--bundle', compact, '--sha', sha, '--out', join(out, 'compact-reports')], { cwd: local, env });
+  const receipt = JSON.parse(readFileSync(join(out, 'compact-reports/workspace-rehearsal.json'), 'utf8'));
+  requireThat(receipt.state === 'rehearsed' && receipt.completed.length === 4 && receipt.published === false, 'compact rehearsal incomplete');
+  writeFileSync(join(out, 'rehearse.yml'), renderRehearsal(commit, members, '1.88.0', manifest, true));
   console.log(`Workspace packaged, rehearsed, retried, and consumed in dependency order. Evidence: ${out}`);
 });
