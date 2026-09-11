@@ -15,7 +15,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
       commit: { type: 'string', default: process.env.GITHUB_SHA }, ref: { type: 'string', default: process.env.GITHUB_REF },
       'pipeline-ref': { type: 'string', default: process.env.PIPELINE_REF }, 'base-branch': { type: 'string', default: 'main' },
       manifest: { type: 'string', default: 'Cargo.toml' }, 'tag-prefix': { type: 'string', default: 'v' },
-      'members-json': { type: 'string' }, workspace: { type: 'boolean' },
+      'members-json': { type: 'string' }, workspace: { type: 'boolean' }, lockstep: { type: 'boolean' },
       'smokes-json': { type: 'string', default: '{}' }, track: { type: 'boolean', default: false },
     } });
     const text = (key: keyof typeof values): string => {
@@ -30,7 +30,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
       }));
       await prepareWorkspace({ source: text('source'), out: text('out'), toolchain: text('toolchain'),
         repository: text('repository'), commit: text('commit'), ref: text('ref'), pipelineRef: text('pipeline-ref'),
-        baseBranch: values['base-branch'] ?? 'main', manifest: text('manifest'), tagPrefix: text('tag-prefix'), workspace: values.workspace, smokes,
+        baseBranch: values['base-branch'] ?? 'main', manifest: text('manifest'), tagPrefix: text('tag-prefix'), workspace: values.workspace, lockstep: values.lockstep, smokes,
         members: members.map(value => { const pkg = record(value); requireThat(typeof pkg.name === 'string', 'member name required');
           return { name: pkg.name, needs: strings(pkg.needs, 'dependencies') }; }) });
     } else {

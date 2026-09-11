@@ -6,6 +6,7 @@ import { canonical, digest, inside, output, readRegular, record, requireThat, ut
 import { bindCandidate, dependencyNames, planRelease, readPlan } from './plan.ts';
 import type { PlanOptions, ReleasePlan } from './plan.ts';
 import { prepare } from './prepare.ts';
+import { checkMetadataPolicy } from './policy.ts';
 
 export interface WorkspaceIndex {
   schema: 'zrelease.workspace/v1';
@@ -56,6 +57,7 @@ export async function loadWorkspace(root: string, expected: string, bindings: Bi
     requireThat(pkg.name === name && typeof pkg.sha256 === 'string', 'workspace order differs from plan');
     const capsule = await load(join(root, 'candidates', name), pkg.sha256, { ...bindings, package: name });
     bindCandidate(plan, capsule.candidate);
+    checkMetadataPolicy(plan, JSON.parse(utf8(capsule.metadata)));
     requireThat(capsule.candidate.release_plan_sha256 === raw.plan_sha256, 'candidate belongs to another release plan');
     capsules.push(capsule);
   }

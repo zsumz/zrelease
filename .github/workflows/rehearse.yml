@@ -8,6 +8,9 @@ name: Workspace rehearsal
       workspace:
         type: boolean
         default: false
+      lockstep:
+        type: boolean
+        default: false
       pipeline-ref:
         type: string
         required: true
@@ -74,6 +77,7 @@ jobs:
         run: |
           flags=()
           [[ "$WORKSPACE" == true ]] && flags+=(--workspace)
+          [[ "$LOCKSTEP" == true ]] && flags+=(--lockstep)
           node .pipeline/dist/workspace.mjs prepare \
             --source .source --out "$RUNNER_TEMP/workspace" \
             --members-json "$MEMBERS" --toolchain "$TOOLCHAIN" \
@@ -82,6 +86,7 @@ jobs:
         env:
           MEMBERS: ${{ inputs.members }}
           WORKSPACE: ${{ inputs.workspace }}
+          LOCKSTEP: ${{ inputs.lockstep }}
           TOOLCHAIN: ${{ inputs.toolchain }}
           MANIFEST: ${{ inputs.manifest-path }}
           BASE_BRANCH: ${{ inputs.base-branch }}

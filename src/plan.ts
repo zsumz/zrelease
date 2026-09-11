@@ -3,14 +3,17 @@ import { basename, join, relative as pathRelative } from 'node:path';
 import { canonical, digest, DIGEST, NAME, output, readRegular, record, REPO, requireThat, SHA, strings, TOOLCHAIN, utf8, valid, version, within, writeJson } from './common.ts';
 import { cargoEnvironment, run, temporary } from './process.ts';
 import type { Candidate, SourceIdentity } from './types.ts';
+import { checkVersionPolicy } from './policy.ts';
+import type { VersionPolicy } from './policy.ts';
 
 export interface Member { name: string; needs: string[] }
 export interface ReleasePlan {
   schema: 'zrelease.plan/v1'; source: SourceIdentity; pipeline_ref: string; toolchain: string;
   manifest: string; publishing: boolean; packages: (Member & { version: string })[];
+  version_policy?: VersionPolicy;
 }
 
-export function graph(value: unknown, selected?: string[]): ReleasePlan['packages'] {
+export function graph(value: unknown, selected?: string[], lockstep = false): ReleasePlan['packages'] {
   const metadata = record(value, 'Cargo metadata');
   const ids = new Set(strings(metadata.workspace_members, 'workspace members'));
   requireThat(Array.isArray(metadata.packages), 'invalid Cargo packages');
@@ -33,10 +36,14 @@ export function graph(value: unknown, selected?: string[]): ReleasePlan['package
       const sibling = members.find(p => p.name === dep.name && (dep.path
         ? pathRelative(String(dep.path), String(p.manifest_path)) === 'Cargo.toml'
         : !dep.registry && (!dep.source || dep.source === 'registry+https://github.com/rust-lang/crates.io-index')));
-      if (sibling && names.includes(String(sibling.name))) needs.add(String(sibling.name));
+      if (sibling && names.includes(String(sibling.name))) {
+        needs.add(String(sibling.name));
+        if (lockstep) requireThat(dep.req === `=${version(pkg.version)}`, `lockstep dependency ${name} -> ${String(dep.name)} requires an exact =${String(pkg.version)} requirement`);
+      }
     }
     return { name, version: version(pkg.version), needs: [...needs].sort() };
   });
+  if (lockstep) requireThat(packages.every(p => p.version === packages[0]!.version), 'lockstep release requires one shared package version');
   const sorted: ReleasePlan['packages'] = [], active = new Set<string>(), done = new Set<string>();
   function visit(name: string): void {
     requireThat(!active.has(name), `workspace dependency cycle involving ${name}`);
@@ -71,7 +78,9 @@ export function readPlan(path: string, expected: string, bindings: { repository?
     requireThat(strings(pkg.needs, 'crate dependencies').every(dep => seen.has(dep)), 'release plan is not dependency ordered');
     seen.add(String(pkg.name));
   }
-  return plan as unknown as ReleasePlan;
+  const result = plan as unknown as ReleasePlan;
+  checkVersionPolicy(result);
+  return result;
 }
 
 export function bindCandidate(plan: ReleasePlan, candidate: Candidate): void {
@@ -93,7 +102,7 @@ export function dependencyNames(plan: ReleasePlan, name: string): string[] {
 
 export interface PlanOptions {
   source: string; manifest: string; members: Member[]; toolchain: string; repository: string; commit: string;
-  ref: string; pipelineRef: string; publishing: boolean; baseBranch: string; tagPrefix: string; out: string; workspace?: boolean;
+  ref: string; pipelineRef: string; publishing: boolean; baseBranch: string; tagPrefix: string; out: string; workspace?: boolean; lockstep?: boolean;
 }
 export async function planRelease(options: PlanOptions): Promise<ReleasePlan> {
   const source = realpathSync(options.source);
@@ -110,7 +119,7 @@ export async function planRelease(options: PlanOptions): Promise<ReleasePlan> {
   const packages = await temporary('zrelease-plan-', async work => {
     const env = cargoEnvironment(join(work, 'cargo-home'), join(work, 'target'));
     const raw = await run(['cargo', `+${options.toolchain}`, 'metadata', '--no-deps', '--locked', '--format-version', '1', '--manifest-path', manifest], { cwd: source, env });
-    return graph(JSON.parse(raw), options.workspace ? undefined : options.members.map(p => p.name));
+    return graph(JSON.parse(raw), options.workspace ? undefined : options.members.map(p => p.name), options.lockstep);
   });
   const expected = options.members.map(p => ({ name: p.name, needs: [...p.needs].sort() })).sort((a, b) => a.name.localeCompare(b.name));
   const actual = packages.map(({ name, needs }) => ({ name, needs })).sort((a, b) => a.name.localeCompare(b.name));
@@ -122,12 +131,19 @@ export async function planRelease(options: PlanOptions): Promise<ReleasePlan> {
     requireThat(await run(['git', 'rev-parse', `${options.ref}^{commit}`], { cwd: source }) === options.commit, 'release tag differs from source commit');
   }
   const plan: ReleasePlan = { schema: 'zrelease.plan/v1', source: { repository: options.repository, commit: options.commit, ref: options.ref },
-    pipeline_ref: options.pipelineRef, toolchain: options.toolchain, manifest: options.manifest, publishing: options.publishing, packages };
+    pipeline_ref: options.pipelineRef, toolchain: options.toolchain, manifest: options.manifest, publishing: options.publishing, packages,
+    ...(options.lockstep ? { version_policy: { mode: 'lockstep' as const, version: packages[0]!.version, tag_prefix: options.tagPrefix } } : {}) };
+  checkVersionPolicy(plan);
+  // Check every name before approval, so a later new crate cannot cause a partial release.
+  if (options.publishing) {
+    const { Registry } = await import('./registry.ts');
+    await new Registry().requireExisting(packages.map(p => p.name));
+  }
   writeJson(options.out, plan);
   const sha = digest(readFileSync(options.out));
   output({ plan_sha256: sha });
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY,
-    `## Release\n\nCommit: \`${options.commit}\`\n\nPlan: \`${sha}\`\n\n| Crate | Version | After |\n| --- | --- | --- |\n` +
+    `## Release\n\nCommit: \`${options.commit}\`\n\nRef: \`${options.ref}\`\n\nVersion policy: ${options.lockstep ? 'lockstep (exact internal pins and version tag)' : 'independent versions'}\n\nPlan: \`${sha}\`\n\n| Crate | Version | After |\n| --- | --- | --- |\n` +
     packages.map(p => `| ${p.name} | ${p.version} | ${p.needs.join(', ') || '—'} |`).join('\n') + '\n\n' +
     (options.publishing ? 'Approve this release once in the release environment. Crates publish and verify in dependency order.\n' : 'Rehearsal only; nothing will be published.\n'));
   return plan;

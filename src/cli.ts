@@ -12,11 +12,13 @@ import { prepare } from './prepare.ts';
 import { Registry } from './registry.ts';
 import { bindCandidate, dependencyNames, planRelease, readPlan } from './plan.ts';
 import { loadDependencies } from './staging.ts';
+import { checkMetadataPolicy } from './policy.ts';
+import type { PublishMetadata } from './types.ts';
 
-const commands = ['plan', 'prepare', 'check', 'upload', 'observe', 'consumer', 'rehearse', 'begin', 'finish'];
+const commands = ['plan', 'preflight', 'prepare', 'check', 'upload', 'observe', 'consumer', 'rehearse', 'begin', 'finish'];
 type Options = NonNullable<ParseArgsConfig['options']>;
 export interface Services {
-  registry: () => Pick<Registry, 'publish' | 'observe'>;
+  registry: () => Pick<Registry, 'publish' | 'observe' | 'requireExisting'>;
   deployments: (repository: string, token: string) => Pick<Deployments, 'begin' | 'status'>;
 }
 const services: Services = { registry: () => new Registry(), deployments: (repo, token) => new Deployments(repo, token) };
@@ -38,10 +40,10 @@ export async function execute(argv: string[], dependencies: Services = services)
     for (const key of ['source', 'toolchain', 'repository', 'commit', 'ref', 'pipeline-ref', 'out']) field(key, undefined, true);
     field('manifest', 'Cargo.toml'); field('tag-prefix', 'v'); field('base-branch', 'main'); field('smoke', ''); field('features-json', '[]');
     flag('publishing'); flag('no-default-features');
-    if (command === 'plan') { field('members-json', undefined, true); flag('workspace'); }
+    if (command === 'plan') { field('members-json', undefined, true); flag('workspace'); flag('lockstep'); }
     else { field('package', undefined, true); field('dependencies'); field('dependency-shas', '[]'); }
   } else {
-    field('capsule', undefined, true); field('candidate-sha', undefined, true);
+    if (command !== 'preflight') { field('capsule', undefined, true); field('candidate-sha', undefined, true); }
     field('repository', process.env.GITHUB_REPOSITORY); field('commit', process.env.GITHUB_SHA);
     field('pipeline-ref', process.env.PIPELINE_REF); field('package');
     if (['upload', 'observe', 'rehearse', 'finish', 'consumer'].includes(command)) field('out', undefined, true);
@@ -49,7 +51,7 @@ export async function execute(argv: string[], dependencies: Services = services)
     if (['begin', 'finish'].includes(command)) { flag('production'); field('run-url', undefined, true); }
     if (command === 'finish') { field('deployment-id', undefined, true); field('results-json', undefined, true); field('reports'); }
   }
-  if (['prepare', 'upload', 'check'].includes(command)) { field('plan'); field('plan-sha'); }
+  if (['prepare', 'upload', 'check', 'preflight'].includes(command)) { field('plan', undefined, command === 'preflight'); field('plan-sha', undefined, command === 'preflight'); }
   const { values } = parseArgs({ args, options, strict: true, allowPositionals: false });
   if (values.help) {
     console.log(`zrelease ${command}\n` + Object.keys(options).map(k => `  --${k}${required.includes(k) ? ' (required)' : ''}`).join('\n')); return;
@@ -61,12 +63,17 @@ export async function execute(argv: string[], dependencies: Services = services)
   const bindings = { repository: maybe('repository'), commit: maybe('commit'), pipelineRef: maybe('pipeline-ref') };
   requireThat(Boolean(values.plan) === Boolean(values['plan-sha']), '--plan and --plan-sha must be provided together');
   const release = values.plan ? readPlan(text('plan'), text('plan-sha'), bindings) : undefined;
+  if (command === 'preflight') {
+    requireThat(release?.publishing, 'preflight requires a publishing plan');
+    await dependencies.registry().requireExisting(release.packages.map(p => p.name));
+    return;
+  }
   if (command === 'plan') {
     const raw: unknown = JSON.parse(text('members-json'));
     requireThat(Array.isArray(raw), 'members-json must be an array');
     await planRelease({ source: text('source'), manifest: text('manifest'), toolchain: text('toolchain'), repository: text('repository'),
       commit: text('commit'), ref: text('ref'), pipelineRef: text('pipeline-ref'), publishing: yes('publishing'), baseBranch: text('base-branch'),
-      tagPrefix: text('tag-prefix'), out: text('out'), workspace: yes('workspace'), members: raw.map(value => {
+      tagPrefix: text('tag-prefix'), out: text('out'), workspace: yes('workspace'), lockstep: yes('lockstep'), members: raw.map(value => {
         const p = record(value); requireThat(typeof p.name === 'string', 'member name is required');
         return { name: p.name, needs: strings(p.needs, 'member dependencies') };
       }) });
@@ -94,6 +101,7 @@ export async function execute(argv: string[], dependencies: Services = services)
   });
   if (release) {
     bindCandidate(release, candidate);
+    checkMetadataPolicy(release, JSON.parse(metadata.toString('utf8')) as PublishMetadata);
     requireThat(candidate.release_plan_sha256 === text('plan-sha'), 'candidate is not bound to this release plan');
   }
   const api = () => dependencies.deployments(candidate.source.repository, process.env.GITHUB_TOKEN ?? '');
@@ -107,7 +115,9 @@ export async function execute(argv: string[], dependencies: Services = services)
       if (release) requireThat(release.publishing && release.source.ref.startsWith('refs/tags/'), 'release plan does not authorize publication');
       const expectedRef = release?.source.ref ?? `refs/tags/${text('tag-prefix')}${candidate.package.version}`;
       requireThat(candidate.source.ref === expectedRef && process.env.GITHUB_REF === expectedRef, 'publishing requires the exact version tag');
-      writeJson(text('out'), { ...await dependencies.registry().publish(candidate, crate, metadata, process.env.CARGO_REGISTRY_TOKEN ?? ''), candidate_sha256: text('candidate-sha') });
+      const registry = dependencies.registry();
+      await registry.requireExisting(release?.packages.map(p => p.name) ?? [candidate.package.name]);
+      writeJson(text('out'), { ...await registry.publish(candidate, crate, metadata, process.env.CARGO_REGISTRY_TOKEN ?? ''), candidate_sha256: text('candidate-sha') });
       break;
     }
     case 'observe': writeJson(text('out'), await dependencies.registry().observe(candidate.package.name, candidate.package.version, candidate.files['package.crate'].sha256)); break;

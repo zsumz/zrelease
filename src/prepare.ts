@@ -11,6 +11,7 @@ import { bindCandidate } from './plan.ts';
 import type { ReleasePlan } from './plan.ts';
 import { stagingRegistry } from './staging.ts';
 import { runConsumer } from './consumer.ts';
+import { checkMetadataPolicy } from './policy.ts';
 
 export interface PrepareOptions {
   source: string; manifest?: string; package: string; toolchain: string; repository: string;
@@ -69,6 +70,7 @@ export async function prepare(options: PrepareOptions): Promise<Candidate> {
       const crate = readFileSync(join(work, 'target', 'package', `${name}-${vers}.crate`));
       const files = await archiveFiles(crate, name, vers);
       const publishMetadata = normalizedMetadata(files, name, vers);
+      if (options.plan) checkMetadataPolicy(options.plan, publishMetadata);
       const vcsBytes = files.get('.cargo_vcs_info.json');
       if (vcsBytes) {
         const git = record(record(JSON.parse(utf8(vcsBytes))).git);

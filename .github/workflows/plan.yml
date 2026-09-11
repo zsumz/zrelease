@@ -9,6 +9,10 @@ name: Plan and approve release
       workspace:
         type: boolean
         default: false
+      lockstep:
+        type: boolean
+        default: false
+        description: Require shared versions, exact internal pins and matching version tags.
       pipeline-ref:
         type: string
         required: true
@@ -71,6 +75,7 @@ jobs:
         flags=()
         [[ "$PUBLISH" == true ]] && flags+=(--publishing)
         [[ "$WORKSPACE" == true ]] && flags+=(--workspace)
+        [[ "$LOCKSTEP" == true ]] && flags+=(--lockstep)
         node .pipeline/dist/zrelease.mjs plan --source .source --manifest "$MANIFEST" \
           --members-json "$MEMBERS" --toolchain "$TOOLCHAIN" --repository "$GITHUB_REPOSITORY" \
           --commit "$GITHUB_SHA" --ref "$GITHUB_REF" --pipeline-ref "$PIPELINE_REF" \
@@ -80,6 +85,7 @@ jobs:
         TOOLCHAIN: ${{ inputs.toolchain }}
         MEMBERS: ${{ inputs.members }}
         WORKSPACE: ${{ inputs.workspace }}
+        LOCKSTEP: ${{ inputs.lockstep }}
         MANIFEST: ${{ inputs.manifest-path }}
         PUBLISH: ${{ inputs.publish }}
         BASE_BRANCH: ${{ inputs.base-branch }}

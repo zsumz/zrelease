@@ -136,6 +136,7 @@ test('an approved workspace can publish differently versioned crates under one t
   let uploads = 0;
   await execute(['upload', '--capsule', path, '--candidate-sha', digest(readFileSync(join(path, 'candidate.json'))), '--out', join(path, 'report'),
     '--confirm-publish', '--plan', file, '--plan-sha', sha], { deployments: () => assert.fail(), registry: () => ({
+      requireExisting: async names => { assert.deepEqual(names, ['base', candidate.package.name]); },
       observe: async () => assert.fail(), publish: async () => { uploads++; return { state: 'registry-verified', sha256: candidate.files['package.crate'].sha256,
         bytes: candidate.files['package.crate'].size, version_url: 'https://crates.io/crates/example-lib/1.2.3', observed_at: 'now' }; },
     }) });

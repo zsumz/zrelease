@@ -1,19 +1,15 @@
 import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);
-
-// scripts/install.ts
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename as basename2, dirname, join as join2, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { parseArgs } from "node:util";
-import { spawnSync } from "node:child_process";
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __esm = (fn, res, err) => function __init() {
+  if (err) throw err[0];
+  try {
+    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+  } catch (e) {
+    throw err = [e], e;
+  }
+};
 
 // src/common.ts
-var ReleaseError = class extends Error {
-};
-var SHA = /^[0-9a-f]{40}$/;
-var NAME = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
-var VERSION = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
-var TOOLCHAIN = /^[0-9]+\.[0-9]+\.[0-9]+$/;
 function requireThat(condition, message) {
   if (!condition) throw new ReleaseError(message);
 }
@@ -41,10 +37,39 @@ function relative(value) {
   requireThat(!value.startsWith("/") && parts.length && !parts.some((p) => p === ".." || p.includes(":")), `unsafe path: ${JSON.stringify(value)}`);
   return parts.join("/");
 }
+var ReleaseError, SHA, NAME, VERSION, TOOLCHAIN;
+var init_common = __esm({
+  "src/common.ts"() {
+    "use strict";
+    ReleaseError = class extends Error {
+    };
+    SHA = /^[0-9a-f]{40}$/;
+    NAME = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+    VERSION = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+    TOOLCHAIN = /^[0-9]+\.[0-9]+\.[0-9]+$/;
+  }
+});
+
+// scripts/install.ts
+init_common();
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { basename as basename2, dirname, join as join2, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+import { spawnSync } from "node:child_process";
 
 // src/plan.ts
+init_common();
 import { basename, join, relative as pathRelative } from "node:path";
-function graph(value, selected) {
+
+// src/process.ts
+init_common();
+
+// src/policy.ts
+init_common();
+
+// src/plan.ts
+function graph(value, selected, lockstep = false) {
   const metadata = record(value, "Cargo metadata");
   const ids = new Set(strings(metadata.workspace_members, "workspace members"));
   requireThat(Array.isArray(metadata.packages), "invalid Cargo packages");
@@ -65,10 +90,14 @@ function graph(value, selected) {
     for (const raw of pkg.dependencies) {
       const dep = record(raw);
       const sibling = members.find((p) => p.name === dep.name && (dep.path ? pathRelative(String(dep.path), String(p.manifest_path)) === "Cargo.toml" : !dep.registry && (!dep.source || dep.source === "registry+https://github.com/rust-lang/crates.io-index")));
-      if (sibling && names.includes(String(sibling.name))) needs.add(String(sibling.name));
+      if (sibling && names.includes(String(sibling.name))) {
+        needs.add(String(sibling.name));
+        if (lockstep) requireThat(dep.req === `=${version(pkg.version)}`, `lockstep dependency ${name} -> ${String(dep.name)} requires an exact =${String(pkg.version)} requirement`);
+      }
     }
     return { name, version: version(pkg.version), needs: [...needs].sort() };
   });
+  if (lockstep) requireThat(packages.every((p) => p.version === packages[0].version), "lockstep release requires one shared package version");
   const sorted = [], active = /* @__PURE__ */ new Set(), done = /* @__PURE__ */ new Set();
   function visit(name) {
     requireThat(!active.has(name), `workspace dependency cycle involving ${name}`);
@@ -85,7 +114,7 @@ function graph(value, selected) {
 }
 
 // scripts/install.ts
-function render(sha, selected, toolchain, manifest = "Cargo.toml", workspace = false) {
+function render(sha, selected, toolchain, manifest = "Cargo.toml", workspace = false, lockstep = false) {
   valid(SHA, sha, "pipeline commit SHA");
   valid(TOOLCHAIN, toolchain, "exact Rust toolchain");
   const members = typeof selected === "string" ? [{ name: selected, needs: [] }] : selected;
@@ -130,12 +159,12 @@ function render(sha, selected, toolchain, manifest = "Cargo.toml", workspace = f
 ` : "");
   }).join("");
   let text = readFileSync(join2(import.meta.dirname, "../templates/release.yml.in"), "utf8");
-  for (const [key, value] of Object.entries({ SHA: sha, MEMBERS: JSON.stringify(members.map(({ name, needs }) => ({ name, needs }))), JOBS: jobs, WORKSPACE: String(workspace), TOOLCHAIN: toolchain, MANIFEST: manifest })) text = text.replaceAll(`@@${key}@@`, value);
+  for (const [key, value] of Object.entries({ SHA: sha, MEMBERS: JSON.stringify(members.map(({ name, needs }) => ({ name, needs }))), JOBS: jobs, WORKSPACE: String(workspace), LOCKSTEP: String(lockstep), TOOLCHAIN: toolchain, MANIFEST: manifest })) text = text.replaceAll(`@@${key}@@`, value);
   requireThat(!text.includes("@@"), "unresolved workflow template placeholder");
   return text;
 }
-function renderRehearsal(sha, selected, toolchain, manifest = "Cargo.toml", workspace = false) {
-  render(sha, selected, toolchain, manifest, workspace);
+function renderRehearsal(sha, selected, toolchain, manifest = "Cargo.toml", workspace = false, lockstep = false) {
+  render(sha, selected, toolchain, manifest, workspace, lockstep);
   const members = typeof selected === "string" ? [{ name: selected, needs: [] }] : selected;
   return `# Add your canonical CI to rehearsal.needs. Regenerate when crate dependencies change.
 name: Rehearse
@@ -154,6 +183,7 @@ jobs:
     with:
       members: '${JSON.stringify(members)}'
       workspace: ${workspace}
+      lockstep: ${lockstep}
       pipeline-ref: '${sha}'
       toolchain: '${toolchain}'
       manifest-path: '${manifest}'
@@ -168,12 +198,13 @@ function main(args = process.argv.slice(2)) {
       source: { type: "string" },
       rehearsal: { type: "boolean" },
       workspace: { type: "boolean" },
+      lockstep: { type: "boolean" },
       manifest: { type: "string", default: "Cargo.toml" },
       out: { type: "string" },
       help: { type: "boolean", short: "h" }
     } });
     if (values.help) {
-      console.log("install --sha SHA --toolchain VERSION --out FILE (--package NAME | --source DIR --workspace) [--manifest Cargo.toml] [--rehearsal]\nUse --rehearsal for a compact workspace practice workflow.\nRepeat --package to select several workspace members; use --source to discover their dependencies.");
+      console.log("install --sha SHA --toolchain VERSION --out FILE (--package NAME | --source DIR --workspace) [--manifest Cargo.toml] [--rehearsal] [--lockstep]\nUse --rehearsal for a compact workspace practice workflow.\nUse --lockstep to require one version, exact internal pins and matching version tags.\nRepeat --package to select several workspace members; use --source to discover their dependencies.");
       return 0;
     }
     requireThat(values.sha && values.toolchain && values.out && (values.package?.length || values.workspace), "--sha, --toolchain, --out and --package or --workspace are required");
@@ -188,9 +219,9 @@ function main(args = process.argv.slice(2)) {
         { cwd: values.source, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }
       );
       requireThat(result.status === 0, "cannot discover Cargo workspace: " + (result.error?.message ?? result.stderr));
-      members = graph(JSON.parse(result.stdout), values.workspace ? void 0 : values.package).map(({ name, needs }) => ({ name, needs }));
+      members = graph(JSON.parse(result.stdout), values.workspace ? void 0 : values.package, values.lockstep).map(({ name, needs }) => ({ name, needs }));
     }
-    const text = (values.rehearsal ? renderRehearsal : render)(values.sha, members, values.toolchain, values.manifest, values.workspace);
+    const text = (values.rehearsal ? renderRehearsal : render)(values.sha, members, values.toolchain, values.manifest, values.workspace, values.lockstep);
     mkdirSync(dirname(values.out), { recursive: true });
     writeFileSync(values.out, text, { flag: "wx" });
     console.log(`Created ${values.out}. Rehearsal is the default; nothing was published.`);

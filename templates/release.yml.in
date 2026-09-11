@@ -24,6 +24,7 @@ jobs:
     with:
       members: '@@MEMBERS@@'
       workspace: @@WORKSPACE@@
+      lockstep: @@LOCKSTEP@@
       pipeline-ref: '@@SHA@@'
       toolchain: '@@TOOLCHAIN@@'
       manifest-path: '@@MANIFEST@@'

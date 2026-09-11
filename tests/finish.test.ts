@@ -80,10 +80,12 @@ test('rehearsal evidence from another archive cannot complete delivery', async t
   assert.equal(result.receipt.phase, 'invalid-verification-evidence'); assert.deepEqual(result.statuses, ['failure']);
 });
 test('CLI release resumes an accepted upload and finalizes only with matching consumer evidence', async t => {
-  const path = temp(t), { candidate, sha } = await makeCapsule(path);
+  const path = temp(t), { candidate, sha, crate, metadata } = await makeCapsule(path);
   environment(t, { GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF: candidate.source.ref,
     CARGO_REGISTRY_TOKEN: 'rehearsal-only', GITHUB_TOKEN: 'fixture-only', GITHUB_OUTPUT: join(path, 'outputs') });
   const { registry, state, close } = await registryServer(); t.after(close); state.failAfterAccept = true;
+  // Trusted publishing starts with an existing crate, but a new target version.
+  state.versions.set(`${candidate.package.name}@0.1.0`, { metadata: { ...JSON.parse(metadata.toString()), vers: '0.1.0' }, crate });
   const deploymentWrites: Record<string, unknown>[] = [];
   const dependencies: Services = { registry: () => registry, deployments: (repository, token) => new Deployments(repository, token, {
     request: async (_method, _url, options) => { deploymentWrites.push(JSON.parse(options!.body!.toString())); return Buffer.from('{"id":42}'); },

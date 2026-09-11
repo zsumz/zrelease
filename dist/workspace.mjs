@@ -11,12 +11,24 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
   if (typeof require !== "undefined") return require.apply(this, arguments);
   throw Error('Dynamic require of "' + x + '" is not supported');
 });
+var __esm = (fn, res, err) => function __init() {
+  if (err) throw err[0];
+  try {
+    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+  } catch (e) {
+    throw err = [e], e;
+  }
+};
 var __commonJS = (cb, mod) => function __require2() {
   try {
     return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
   } catch (e) {
     throw mod = 0, e;
   }
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -34,6 +46,121 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+
+// src/common.ts
+import { createHash } from "node:crypto";
+import { appendFileSync, constants, closeSync, fstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, relative as pathRelative, resolve, sep } from "node:path";
+function requireThat(condition, message) {
+  if (!condition) throw new ReleaseError(message);
+}
+function record(value, what = "object") {
+  requireThat(value !== null && typeof value === "object" && !Array.isArray(value), `invalid ${what}`);
+  return value;
+}
+function strings(value, what) {
+  requireThat(Array.isArray(value) && value.every((x) => typeof x === "string"), `invalid ${what}`);
+  return value;
+}
+function valid(pattern, value, what) {
+  requireThat(typeof value === "string" && pattern.exec(value)?.[0] === value, `invalid ${what}: ${JSON.stringify(value)}`);
+  return value;
+}
+function version(value) {
+  const result = valid(VERSION, value, "version (build metadata is intentionally unsupported)");
+  const prerelease = VERSION.exec(result)?.[4];
+  requireThat(!prerelease?.split(".").some((x) => /^0[0-9]+$/.test(x)), "numeric prerelease identifiers cannot have leading zeroes");
+  return result;
+}
+function compareKeys(a, b) {
+  const left = Array.from(a, (c) => c.codePointAt(0));
+  const right = Array.from(b, (c) => c.codePointAt(0));
+  for (let i = 0; i < Math.min(left.length, right.length); i++) {
+    if (left[i] !== right[i]) return left[i] - right[i];
+  }
+  return left.length - right.length;
+}
+function canonical(value) {
+  function encode(item) {
+    if (item === null || typeof item === "boolean" || typeof item === "string") return JSON.stringify(item);
+    if (typeof item === "number") {
+      requireThat(Number.isFinite(item), "non-finite JSON number");
+      return JSON.stringify(item);
+    }
+    if (Array.isArray(item)) return `[${item.map(encode).join(",")}]`;
+    const object = record(item, "JSON value");
+    return `{${Object.keys(object).sort(compareKeys).map((key) => `${JSON.stringify(key)}:${encode(object[key])}`).join(",")}}`;
+  }
+  return Buffer.from(encode(value) + "\n");
+}
+function utf8(data) {
+  try {
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(data);
+  } catch {
+    throw new ReleaseError("invalid UTF-8");
+  }
+}
+function readRegular(path, limit) {
+  let fd;
+  try {
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const stat = fstatSync(fd);
+    requireThat(stat.isFile(), `missing or linked regular file: ${path}`);
+    requireThat(stat.size <= limit, `file too large: ${path}`);
+    const bytes = readFileSync(fd);
+    requireThat(bytes.length <= limit, `file too large: ${path}`);
+    return bytes;
+  } finally {
+    if (fd !== void 0) closeSync(fd);
+  }
+}
+function readJson(path) {
+  return JSON.parse(utf8(readRegular(path, 4 * 1024 * 1024)));
+}
+function writeJson(path, value) {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path + ".tmp", canonical(value));
+  renameSync(path + ".tmp", path);
+}
+function relative(value) {
+  requireThat(typeof value === "string" && value && !/[\\\0]/.test(value), "invalid relative path");
+  const parts = value.split("/").filter((p) => p && p !== ".");
+  requireThat(!value.startsWith("/") && parts.length && !parts.some((p) => p === ".." || p.includes(":")), `unsafe path: ${JSON.stringify(value)}`);
+  return parts.join("/");
+}
+function inside(root, path) {
+  const rel = pathRelative(resolve(root), resolve(path));
+  return !isAbsolute(rel) && rel !== ".." && !rel.startsWith(".." + sep);
+}
+function within(root, value) {
+  const path = realpathSync(resolve(root, relative(value)));
+  requireThat(inside(realpathSync(root), path), `path escapes root: ${JSON.stringify(value)}`);
+  return path;
+}
+function output(values) {
+  if (!process.env.GITHUB_OUTPUT) return;
+  for (const [key, value] of Object.entries(values)) {
+    requireThat(!/[\n\r]/.test(`${key}${String(value)}`), "multiline workflow output rejected");
+    appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${String(value)}
+`);
+  }
+}
+var ReleaseError, SHA, DIGEST, NAME, VERSION, REPO, TOOLCHAIN, digest, utcNow;
+var init_common = __esm({
+  "src/common.ts"() {
+    "use strict";
+    ReleaseError = class extends Error {
+    };
+    SHA = /^[0-9a-f]{40}$/;
+    DIGEST = /^[0-9a-f]{64}$/;
+    NAME = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+    VERSION = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+    REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+    TOOLCHAIN = /^[0-9]+\.[0-9]+\.[0-9]+$/;
+    digest = (data) => createHash("sha256").update(data).digest("hex");
+    utcNow = () => (/* @__PURE__ */ new Date()).toISOString();
+  }
+});
 
 // node_modules/events-universal/default.js
 var require_default = __commonJS({
@@ -2457,135 +2584,10 @@ var require_tar_stream = __commonJS({
   }
 });
 
-// src/workspace-cli.ts
-import { resolve as resolve4 } from "node:path";
-import { fileURLToPath } from "node:url";
-import { parseArgs } from "node:util";
-
-// src/common.ts
-import { createHash } from "node:crypto";
-import { appendFileSync, constants, closeSync, fstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, relative as pathRelative, resolve, sep } from "node:path";
-var ReleaseError = class extends Error {
-};
-var SHA = /^[0-9a-f]{40}$/;
-var DIGEST = /^[0-9a-f]{64}$/;
-var NAME = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
-var VERSION = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
-var REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
-var TOOLCHAIN = /^[0-9]+\.[0-9]+\.[0-9]+$/;
-function requireThat(condition, message) {
-  if (!condition) throw new ReleaseError(message);
-}
-function record(value, what = "object") {
-  requireThat(value !== null && typeof value === "object" && !Array.isArray(value), `invalid ${what}`);
-  return value;
-}
-function strings(value, what) {
-  requireThat(Array.isArray(value) && value.every((x) => typeof x === "string"), `invalid ${what}`);
-  return value;
-}
-function valid(pattern, value, what) {
-  requireThat(typeof value === "string" && pattern.exec(value)?.[0] === value, `invalid ${what}: ${JSON.stringify(value)}`);
-  return value;
-}
-function version(value) {
-  const result = valid(VERSION, value, "version (build metadata is intentionally unsupported)");
-  const prerelease = VERSION.exec(result)?.[4];
-  requireThat(!prerelease?.split(".").some((x) => /^0[0-9]+$/.test(x)), "numeric prerelease identifiers cannot have leading zeroes");
-  return result;
-}
-function compareKeys(a, b) {
-  const left = Array.from(a, (c) => c.codePointAt(0));
-  const right = Array.from(b, (c) => c.codePointAt(0));
-  for (let i = 0; i < Math.min(left.length, right.length); i++) {
-    if (left[i] !== right[i]) return left[i] - right[i];
-  }
-  return left.length - right.length;
-}
-function canonical(value) {
-  function encode(item) {
-    if (item === null || typeof item === "boolean" || typeof item === "string") return JSON.stringify(item);
-    if (typeof item === "number") {
-      requireThat(Number.isFinite(item), "non-finite JSON number");
-      return JSON.stringify(item);
-    }
-    if (Array.isArray(item)) return `[${item.map(encode).join(",")}]`;
-    const object = record(item, "JSON value");
-    return `{${Object.keys(object).sort(compareKeys).map((key) => `${JSON.stringify(key)}:${encode(object[key])}`).join(",")}}`;
-  }
-  return Buffer.from(encode(value) + "\n");
-}
-var digest = (data) => createHash("sha256").update(data).digest("hex");
-var utcNow = () => (/* @__PURE__ */ new Date()).toISOString();
-function utf8(data) {
-  try {
-    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(data);
-  } catch {
-    throw new ReleaseError("invalid UTF-8");
-  }
-}
-function readRegular(path, limit) {
-  let fd;
-  try {
-    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-    const stat = fstatSync(fd);
-    requireThat(stat.isFile(), `missing or linked regular file: ${path}`);
-    requireThat(stat.size <= limit, `file too large: ${path}`);
-    const bytes = readFileSync(fd);
-    requireThat(bytes.length <= limit, `file too large: ${path}`);
-    return bytes;
-  } finally {
-    if (fd !== void 0) closeSync(fd);
-  }
-}
-function readJson(path) {
-  return JSON.parse(utf8(readRegular(path, 4 * 1024 * 1024)));
-}
-function writeJson(path, value) {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path + ".tmp", canonical(value));
-  renameSync(path + ".tmp", path);
-}
-function relative(value) {
-  requireThat(typeof value === "string" && value && !/[\\\0]/.test(value), "invalid relative path");
-  const parts = value.split("/").filter((p) => p && p !== ".");
-  requireThat(!value.startsWith("/") && parts.length && !parts.some((p) => p === ".." || p.includes(":")), `unsafe path: ${JSON.stringify(value)}`);
-  return parts.join("/");
-}
-function inside(root, path) {
-  const rel = pathRelative(resolve(root), resolve(path));
-  return !isAbsolute(rel) && rel !== ".." && !rel.startsWith(".." + sep);
-}
-function within(root, value) {
-  const path = realpathSync(resolve(root, relative(value)));
-  requireThat(inside(realpathSync(root), path), `path escapes root: ${JSON.stringify(value)}`);
-  return path;
-}
-function output(values) {
-  if (!process.env.GITHUB_OUTPUT) return;
-  for (const [key, value] of Object.entries(values)) {
-    requireThat(!/[\n\r]/.test(`${key}${String(value)}`), "multiline workflow output rejected");
-    appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${String(value)}
-`);
-  }
-}
-
-// src/workspace.ts
-import { existsSync as existsSync2, mkdirSync as mkdirSync7, readFileSync as readFileSync5 } from "node:fs";
-import { join as join8, resolve as resolve3 } from "node:path";
-
-// src/capsule.ts
-import { join as join2 } from "node:path";
-
 // src/archive.ts
-var import_tar_stream = __toESM(require_tar_stream(), 1);
 import { mkdirSync as mkdirSync2, writeFileSync as writeFileSync2 } from "node:fs";
 import { dirname as dirname2, join } from "node:path";
 import { gunzipSync } from "node:zlib";
-var MAX_CRATE = 32 * 1024 * 1024;
-var MAX_EXPANDED = 128 * 1024 * 1024;
-var MAX_FILES = 2e4;
 async function archiveFiles(data, name, vers) {
   requireThat(data.length > 0 && data.length <= MAX_CRATE, "crate exceeds the 32 MiB pipeline limit");
   const root = `${valid(NAME, name, "package")}-${version(vers)}`;
@@ -2660,6 +2662,254 @@ function extractFiles(files, destination) {
     writeFileSync2(path, content, { flag: "wx", mode: 420 });
   }
 }
+var import_tar_stream, MAX_CRATE, MAX_EXPANDED, MAX_FILES;
+var init_archive = __esm({
+  "src/archive.ts"() {
+    "use strict";
+    import_tar_stream = __toESM(require_tar_stream(), 1);
+    init_common();
+    MAX_CRATE = 32 * 1024 * 1024;
+    MAX_EXPANDED = 128 * 1024 * 1024;
+    MAX_FILES = 2e4;
+  }
+});
+
+// src/http.ts
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+var HttpError, TransportError, Http;
+var init_http = __esm({
+  "src/http.ts"() {
+    "use strict";
+    init_archive();
+    init_common();
+    HttpError = class extends ReleaseError {
+      status;
+      constructor(status, method, url) {
+        super(`${method} ${url}: HTTP ${status}`);
+        this.status = status;
+      }
+    };
+    TransportError = class extends ReleaseError {
+    };
+    Http = class {
+      localTest;
+      constructor(localTest = false) {
+        this.localTest = localTest;
+      }
+      async request(method, url, options = {}) {
+        const parsed = new URL(url);
+        if (this.localTest) requireThat(parsed.protocol === "http:" && parsed.hostname === "127.0.0.1", "test transport only allows IPv4 loopback");
+        else {
+          requireThat(parsed.protocol === "https:" && ["crates.io", "index.crates.io", "static.crates.io", "api.github.com"].includes(parsed.hostname), "unapproved HTTP destination");
+          requireThat(parsed.port === "" || parsed.port === "443", "unapproved HTTPS port");
+        }
+        requireThat(!parsed.username && !parsed.password && !parsed.hash, "invalid HTTP URL");
+        const { body, token, github = false, limit = MAX_CRATE + 1 } = options;
+        if (token) {
+          requireThat(["PUT", "POST"].includes(method) && (this.localTest || ["crates.io", "api.github.com"].includes(parsed.hostname)), "refusing to send credentials to this endpoint");
+          requireThat(!/[\r\n]/.test(token), "invalid credential");
+        }
+        const headers = {
+          "User-Agent": "zrelease/0.1 (https://github.com/zsumz/zrelease)",
+          Accept: "application/json"
+        };
+        if (body) {
+          headers["Content-Type"] = github ? "application/json" : "application/octet-stream";
+          headers["Content-Length"] = body.length;
+        }
+        if (token) headers.Authorization = (github ? "Bearer " : "") + token;
+        if (github) {
+          headers.Accept = "application/vnd.github+json";
+          headers["X-GitHub-Api-Version"] = "2022-11-28";
+        }
+        return new Promise((resolve5, reject) => {
+          const send = parsed.protocol === "https:" ? httpsRequest : httpRequest;
+          const request = send(parsed, { method, headers }, (response) => {
+            const status = response.statusCode ?? 0;
+            if (status < 200 || status >= 300) {
+              reject(new HttpError(status, method, url));
+              response.destroy();
+              return;
+            }
+            const chunks = [];
+            let size = 0;
+            response.on("data", (chunk) => {
+              size += chunk.length;
+              if (size > limit) {
+                reject(new ReleaseError("HTTP response exceeds the configured size limit"));
+                response.destroy();
+              } else chunks.push(chunk);
+            });
+            response.on("end", () => resolve5(Buffer.concat(chunks)));
+            response.on("error", () => reject(new TransportError(`${method} ${url}: transport failure; remote outcome may be unknown`)));
+          });
+          const timer = setTimeout(() => request.destroy(new Error("request deadline exceeded")), 3e4);
+          request.on("close", () => clearTimeout(timer));
+          request.on("error", () => reject(new TransportError(`${method} ${url}: transport failure; remote outcome may be unknown`)));
+          request.end(body);
+        });
+      }
+    };
+  }
+});
+
+// src/registry.ts
+var registry_exports = {};
+__export(registry_exports, {
+  Registry: () => Registry,
+  indexPath: () => indexPath,
+  publishBody: () => publishBody
+});
+import { setTimeout as sleep } from "node:timers/promises";
+function indexPath(input) {
+  const name = input.toLowerCase();
+  if (name.length <= 2) return `${name.length}/${name}`;
+  if (name.length === 3) return `3/${name[0]}/${name}`;
+  return `${name.slice(0, 2)}/${name.slice(2, 4)}/${name}`;
+}
+function publishBody(metadata, crate) {
+  requireThat(metadata.length < 2 ** 32 && crate.length < 2 ** 32, "registry framing overflow");
+  const lengths = [Buffer.alloc(4), Buffer.alloc(4)];
+  lengths[0].writeUInt32LE(metadata.length);
+  lengths[1].writeUInt32LE(crate.length);
+  return Buffer.concat([lengths[0], metadata, lengths[1], crate]);
+}
+var Registry;
+var init_registry = __esm({
+  "src/registry.ts"() {
+    "use strict";
+    init_archive();
+    init_common();
+    init_http();
+    Registry = class {
+      http;
+      api;
+      index;
+      download;
+      timeout;
+      interval;
+      constructor(http = new Http(), options = {}) {
+        this.http = http;
+        this.api = options.api ?? "https://crates.io";
+        this.index = options.index ?? "https://index.crates.io";
+        this.download = options.download ?? "https://static.crates.io/crates";
+        this.timeout = options.timeout ?? 18e4;
+        this.interval = options.interval ?? 5e3;
+      }
+      async lookup(name, version2) {
+        const records = await this.entries(name);
+        if (!records) return null;
+        const matches = records.filter((r) => r.vers === version2);
+        requireThat(matches.length <= 1, "registry index contains duplicate versions");
+        return matches[0] ?? null;
+      }
+      async entries(name) {
+        valid(NAME, name, "crate name");
+        let body;
+        try {
+          body = await this.http.request("GET", `${this.index}/${indexPath(name)}`, { limit: 16 * 1024 * 1024 });
+        } catch (error) {
+          if (error instanceof HttpError && error.status === 404) return null;
+          throw error;
+        }
+        let records;
+        try {
+          records = utf8(body).split(/\r?\n/).filter((x) => x.trim()).map((line) => record(JSON.parse(line)));
+        } catch {
+          throw new ReleaseError("registry returned an invalid sparse-index entry");
+        }
+        requireThat(records.length > 0, "registry returned an empty sparse-index entry");
+        return records;
+      }
+      async requireExisting(names) {
+        requireThat(names.length > 0, "registry preflight requires selected crates");
+        const missing = [];
+        for (const name of new Set(names)) {
+          const entries = await this.entries(name);
+          if (entries === null) missing.push(name);
+          else requireThat(entries.every((entry) => typeof entry.name === "string" && entry.name.toLowerCase() === name.toLowerCase() && typeof entry.vers === "string"), `registry returned an invalid crate entry for ${name}`);
+        }
+        requireThat(missing.length === 0, `Unpublished crates require bootstrap: ${missing.join(", ")}. Publish each first version with an API token, then configure Trusted Publishing before retrying the entire release. No crates were uploaded by this preflight.`);
+      }
+      checkRecord(record2, expected) {
+        requireThat(record2.cksum === expected, "immutable version conflict: registry checksum differs; choose a NEW version");
+        requireThat(record2.yanked === false, "version is yanked; refusing to publish or mark it healthy");
+      }
+      async observe(name, version2, expected) {
+        const deadline = performance.now() + this.timeout;
+        let last = "version is not visible";
+        for (; ; ) {
+          try {
+            const entry = await this.lookup(name, version2);
+            if (entry) {
+              this.checkRecord(entry, expected);
+              const data = await this.http.request("GET", `${this.download}/${name}/${name}-${version2}.crate`, { limit: MAX_CRATE });
+              requireThat(digest(data) === expected, "downloaded registry bytes differ from the qualified crate");
+              return {
+                state: "registry-verified",
+                sha256: expected,
+                bytes: data.length,
+                version_url: `https://crates.io/crates/${name}/${version2}`,
+                observed_at: utcNow()
+              };
+            }
+          } catch (error) {
+            if (error instanceof HttpError && [404, 408, 429, 500, 502, 503, 504].includes(error.status)) last = error.message;
+            else if (error instanceof TransportError) last = error.message;
+            else throw error;
+          }
+          if (performance.now() >= deadline) throw new ReleaseError(`registry observation timed out (${last}); this does NOT prove the upload failed; rerun the SAME capsule`);
+          await sleep(Math.min(this.interval, Math.max(0, deadline - performance.now())));
+        }
+      }
+      async publish(candidate, crate, metadata, token) {
+        requireThat(token, "missing crates.io credential");
+        const { name, version: version2 } = candidate.package;
+        const expected = digest(crate);
+        const previous = await this.lookup(name, version2);
+        if (previous) {
+          this.checkRecord(previous, expected);
+          return { ...await this.observe(name, version2, expected), upload: "already-present-identical" };
+        }
+        let outcome = "submitted";
+        try {
+          const raw = await this.http.request("PUT", `${this.api}/api/v1/crates/new`, {
+            body: publishBody(metadata, crate),
+            token,
+            limit: 1024 * 1024
+          });
+          try {
+            const response = record(JSON.parse(utf8(raw)));
+            if (response.errors && (!Array.isArray(response.errors) || response.errors.length > 0)) outcome = "ambiguous-response-reconciled";
+          } catch {
+            outcome = "ambiguous-response-reconciled";
+          }
+        } catch (error) {
+          if (error instanceof HttpError) {
+            if ([401, 403].includes(error.status) || error.status >= 400 && error.status < 500 && ![400, 408, 409, 422, 429].includes(error.status)) throw error;
+          } else if (!(error instanceof TransportError)) throw error;
+          outcome = "ambiguous-response-reconciled";
+        }
+        return { ...await this.observe(name, version2, expected), upload: outcome };
+      }
+    };
+  }
+});
+
+// src/workspace-cli.ts
+init_common();
+import { resolve as resolve4 } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+
+// src/workspace.ts
+import { existsSync as existsSync2, mkdirSync as mkdirSync7, readFileSync as readFileSync5 } from "node:fs";
+import { join as join8, resolve as resolve3 } from "node:path";
+
+// src/capsule.ts
+init_archive();
+import { join as join2 } from "node:path";
 
 // node_modules/smol-toml/dist/date.js
 var DATE_TIME_RE = /^(\d{4}-\d{2}-\d{2})?[T ]?(?:(\d{2}):\d{2}(?::\d{2}(?:\.\d+)?)?)?(Z|[-+]\d{2}:\d{2})?$/i;
@@ -3307,6 +3557,7 @@ function parse(toml, { maxDepth = 1e3, integersAsBigInt } = {}) {
 }
 
 // src/metadata.ts
+init_common();
 function normalizedMetadata(files, name, vers) {
   let manifest;
   try {
@@ -3384,6 +3635,7 @@ function normalizedMetadata(files, name, vers) {
 }
 
 // src/capsule.ts
+init_common();
 var SCHEMA = "zrelease.candidate/v1";
 async function load(directory, expected, bindings = {}) {
   valid(DIGEST, expected, "candidate SHA-256");
@@ -3434,11 +3686,16 @@ async function load(directory, expected, bindings = {}) {
   return { candidate, crate: payloads["package.crate"], metadata: payloads["publish.json"], smoke: payloads["smoke.rs"] };
 }
 
+// src/workspace.ts
+init_common();
+
 // src/plan.ts
+init_common();
 import { appendFileSync as appendFileSync2, readFileSync as readFileSync2, realpathSync as realpathSync2 } from "node:fs";
 import { basename, join as join4, relative as pathRelative2 } from "node:path";
 
 // src/process.ts
+init_common();
 import { spawn } from "node:child_process";
 import { mkdirSync as mkdirSync3, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -3492,8 +3749,32 @@ async function temporary(prefix, action) {
   }
 }
 
+// src/policy.ts
+init_common();
+function checkVersionPolicy(plan) {
+  if (plan.version_policy === void 0) return;
+  const policy = record(plan.version_policy, "version policy");
+  requireThat(policy.mode === "lockstep" && typeof policy.tag_prefix === "string", "unsupported version policy");
+  const expected = version(policy.version);
+  requireThat(plan.packages.every((p) => p.version === expected), "lockstep release requires one shared package version");
+  if (plan.publishing || plan.source.ref.startsWith("refs/tags/")) {
+    requireThat(plan.source.ref === `refs/tags/${policy.tag_prefix}${expected}`, "lockstep release requires an exact version tag");
+  }
+}
+function checkMetadataPolicy(plan, metadata) {
+  checkVersionPolicy(plan);
+  if (!plan.version_policy) return;
+  const expected = plan.version_policy.version;
+  requireThat(metadata.vers === expected, "lockstep archive version differs from the release plan");
+  for (const dep of metadata.deps) {
+    if (plan.packages.some((p) => p.name === dep.name)) {
+      requireThat(dep.version_req === `=${expected}`, `lockstep archive dependency ${dep.name} requires exact =${expected}`);
+    }
+  }
+}
+
 // src/plan.ts
-function graph(value, selected) {
+function graph(value, selected, lockstep = false) {
   const metadata = record(value, "Cargo metadata");
   const ids = new Set(strings(metadata.workspace_members, "workspace members"));
   requireThat(Array.isArray(metadata.packages), "invalid Cargo packages");
@@ -3514,10 +3795,14 @@ function graph(value, selected) {
     for (const raw of pkg.dependencies) {
       const dep = record(raw);
       const sibling = members.find((p) => p.name === dep.name && (dep.path ? pathRelative2(String(dep.path), String(p.manifest_path)) === "Cargo.toml" : !dep.registry && (!dep.source || dep.source === "registry+https://github.com/rust-lang/crates.io-index")));
-      if (sibling && names.includes(String(sibling.name))) needs.add(String(sibling.name));
+      if (sibling && names.includes(String(sibling.name))) {
+        needs.add(String(sibling.name));
+        if (lockstep) requireThat(dep.req === `=${version(pkg.version)}`, `lockstep dependency ${name} -> ${String(dep.name)} requires an exact =${String(pkg.version)} requirement`);
+      }
     }
     return { name, version: version(pkg.version), needs: [...needs].sort() };
   });
+  if (lockstep) requireThat(packages.every((p) => p.version === packages[0].version), "lockstep release requires one shared package version");
   const sorted = [], active = /* @__PURE__ */ new Set(), done = /* @__PURE__ */ new Set();
   function visit(name) {
     requireThat(!active.has(name), `workspace dependency cycle involving ${name}`);
@@ -3557,7 +3842,9 @@ function readPlan(path, expected, bindings = {}) {
     requireThat(strings(pkg.needs, "crate dependencies").every((dep) => seen.has(dep)), "release plan is not dependency ordered");
     seen.add(String(pkg.name));
   }
-  return plan;
+  const result = plan;
+  checkVersionPolicy(result);
+  return result;
 }
 function bindCandidate(plan, candidate) {
   const pkg = plan.packages.find((p) => p.name === candidate.package.name);
@@ -3596,7 +3883,7 @@ async function planRelease(options) {
   const packages = await temporary("zrelease-plan-", async (work) => {
     const env = cargoEnvironment(join4(work, "cargo-home"), join4(work, "target"));
     const raw = await run(["cargo", `+${options.toolchain}`, "metadata", "--no-deps", "--locked", "--format-version", "1", "--manifest-path", manifest], { cwd: source, env });
-    return graph(JSON.parse(raw), options.workspace ? void 0 : options.members.map((p) => p.name));
+    return graph(JSON.parse(raw), options.workspace ? void 0 : options.members.map((p) => p.name), options.lockstep);
   });
   const expected = options.members.map((p) => ({ name: p.name, needs: [...p.needs].sort() })).sort((a, b) => a.name.localeCompare(b.name));
   const actual = packages.map(({ name, needs }) => ({ name, needs })).sort((a, b) => a.name.localeCompare(b.name));
@@ -3614,8 +3901,14 @@ async function planRelease(options) {
     toolchain: options.toolchain,
     manifest: options.manifest,
     publishing: options.publishing,
-    packages
+    packages,
+    ...options.lockstep ? { version_policy: { mode: "lockstep", version: packages[0].version, tag_prefix: options.tagPrefix } } : {}
   };
+  checkVersionPolicy(plan);
+  if (options.publishing) {
+    const { Registry: Registry2 } = await Promise.resolve().then(() => (init_registry(), registry_exports));
+    await new Registry2().requireExisting(packages.map((p) => p.name));
+  }
   writeJson(options.out, plan);
   const sha = digest(readFileSync2(options.out));
   output({ plan_sha256: sha });
@@ -3624,6 +3917,10 @@ async function planRelease(options) {
     `## Release
 
 Commit: \`${options.commit}\`
+
+Ref: \`${options.ref}\`
+
+Version policy: ${options.lockstep ? "lockstep (exact internal pins and version tag)" : "independent versions"}
 
 Plan: \`${sha}\`
 
@@ -3635,198 +3932,18 @@ Plan: \`${sha}\`
 }
 
 // src/prepare.ts
+init_archive();
 import { existsSync, mkdirSync as mkdirSync6, readFileSync as readFileSync4, realpathSync as realpathSync3, writeFileSync as writeFileSync5 } from "node:fs";
 import { basename as basename2, join as join7, resolve as resolve2 } from "node:path";
+init_common();
 
 // src/staging.ts
 import { createServer } from "node:http";
 import { mkdirSync as mkdirSync4, readdirSync, writeFileSync as writeFileSync3 } from "node:fs";
 import { join as join5 } from "node:path";
-
-// src/http.ts
-import { request as httpRequest } from "node:http";
-import { request as httpsRequest } from "node:https";
-var HttpError = class extends ReleaseError {
-  status;
-  constructor(status, method, url) {
-    super(`${method} ${url}: HTTP ${status}`);
-    this.status = status;
-  }
-};
-var TransportError = class extends ReleaseError {
-};
-var Http = class {
-  localTest;
-  constructor(localTest = false) {
-    this.localTest = localTest;
-  }
-  async request(method, url, options = {}) {
-    const parsed = new URL(url);
-    if (this.localTest) requireThat(parsed.protocol === "http:" && parsed.hostname === "127.0.0.1", "test transport only allows IPv4 loopback");
-    else {
-      requireThat(parsed.protocol === "https:" && ["crates.io", "index.crates.io", "static.crates.io", "api.github.com"].includes(parsed.hostname), "unapproved HTTP destination");
-      requireThat(parsed.port === "" || parsed.port === "443", "unapproved HTTPS port");
-    }
-    requireThat(!parsed.username && !parsed.password && !parsed.hash, "invalid HTTP URL");
-    const { body, token, github = false, limit = MAX_CRATE + 1 } = options;
-    if (token) {
-      requireThat(["PUT", "POST"].includes(method) && (this.localTest || ["crates.io", "api.github.com"].includes(parsed.hostname)), "refusing to send credentials to this endpoint");
-      requireThat(!/[\r\n]/.test(token), "invalid credential");
-    }
-    const headers = {
-      "User-Agent": "zrelease/0.1 (https://github.com/zsumz/zrelease)",
-      Accept: "application/json"
-    };
-    if (body) {
-      headers["Content-Type"] = github ? "application/json" : "application/octet-stream";
-      headers["Content-Length"] = body.length;
-    }
-    if (token) headers.Authorization = (github ? "Bearer " : "") + token;
-    if (github) {
-      headers.Accept = "application/vnd.github+json";
-      headers["X-GitHub-Api-Version"] = "2022-11-28";
-    }
-    return new Promise((resolve5, reject) => {
-      const send = parsed.protocol === "https:" ? httpsRequest : httpRequest;
-      const request = send(parsed, { method, headers }, (response) => {
-        const status = response.statusCode ?? 0;
-        if (status < 200 || status >= 300) {
-          reject(new HttpError(status, method, url));
-          response.destroy();
-          return;
-        }
-        const chunks = [];
-        let size = 0;
-        response.on("data", (chunk) => {
-          size += chunk.length;
-          if (size > limit) {
-            reject(new ReleaseError("HTTP response exceeds the configured size limit"));
-            response.destroy();
-          } else chunks.push(chunk);
-        });
-        response.on("end", () => resolve5(Buffer.concat(chunks)));
-        response.on("error", () => reject(new TransportError(`${method} ${url}: transport failure; remote outcome may be unknown`)));
-      });
-      const timer = setTimeout(() => request.destroy(new Error("request deadline exceeded")), 3e4);
-      request.on("close", () => clearTimeout(timer));
-      request.on("error", () => reject(new TransportError(`${method} ${url}: transport failure; remote outcome may be unknown`)));
-      request.end(body);
-    });
-  }
-};
-
-// src/registry.ts
-import { setTimeout as sleep } from "node:timers/promises";
-function indexPath(input) {
-  const name = input.toLowerCase();
-  if (name.length <= 2) return `${name.length}/${name}`;
-  if (name.length === 3) return `3/${name[0]}/${name}`;
-  return `${name.slice(0, 2)}/${name.slice(2, 4)}/${name}`;
-}
-function publishBody(metadata, crate) {
-  requireThat(metadata.length < 2 ** 32 && crate.length < 2 ** 32, "registry framing overflow");
-  const lengths = [Buffer.alloc(4), Buffer.alloc(4)];
-  lengths[0].writeUInt32LE(metadata.length);
-  lengths[1].writeUInt32LE(crate.length);
-  return Buffer.concat([lengths[0], metadata, lengths[1], crate]);
-}
-var Registry = class {
-  http;
-  api;
-  index;
-  download;
-  timeout;
-  interval;
-  constructor(http = new Http(), options = {}) {
-    this.http = http;
-    this.api = options.api ?? "https://crates.io";
-    this.index = options.index ?? "https://index.crates.io";
-    this.download = options.download ?? "https://static.crates.io/crates";
-    this.timeout = options.timeout ?? 18e4;
-    this.interval = options.interval ?? 5e3;
-  }
-  async lookup(name, version2) {
-    let body;
-    try {
-      body = await this.http.request("GET", `${this.index}/${indexPath(name)}`, { limit: 16 * 1024 * 1024 });
-    } catch (error) {
-      if (error instanceof HttpError && error.status === 404) return null;
-      throw error;
-    }
-    let records;
-    try {
-      records = utf8(body).split(/\r?\n/).filter((x) => x.trim()).map((line) => record(JSON.parse(line)));
-    } catch {
-      throw new ReleaseError("registry returned an invalid sparse-index entry");
-    }
-    const matches = records.filter((r) => r.vers === version2);
-    requireThat(matches.length <= 1, "registry index contains duplicate versions");
-    return matches[0] ?? null;
-  }
-  checkRecord(record2, expected) {
-    requireThat(record2.cksum === expected, "immutable version conflict: registry checksum differs; choose a NEW version");
-    requireThat(record2.yanked === false, "version is yanked; refusing to publish or mark it healthy");
-  }
-  async observe(name, version2, expected) {
-    const deadline = performance.now() + this.timeout;
-    let last = "version is not visible";
-    for (; ; ) {
-      try {
-        const entry = await this.lookup(name, version2);
-        if (entry) {
-          this.checkRecord(entry, expected);
-          const data = await this.http.request("GET", `${this.download}/${name}/${name}-${version2}.crate`, { limit: MAX_CRATE });
-          requireThat(digest(data) === expected, "downloaded registry bytes differ from the qualified crate");
-          return {
-            state: "registry-verified",
-            sha256: expected,
-            bytes: data.length,
-            version_url: `https://crates.io/crates/${name}/${version2}`,
-            observed_at: utcNow()
-          };
-        }
-      } catch (error) {
-        if (error instanceof HttpError && [404, 408, 429, 500, 502, 503, 504].includes(error.status)) last = error.message;
-        else if (error instanceof TransportError) last = error.message;
-        else throw error;
-      }
-      if (performance.now() >= deadline) throw new ReleaseError(`registry observation timed out (${last}); this does NOT prove the upload failed; rerun the SAME capsule`);
-      await sleep(Math.min(this.interval, Math.max(0, deadline - performance.now())));
-    }
-  }
-  async publish(candidate, crate, metadata, token) {
-    requireThat(token, "missing crates.io credential");
-    const { name, version: version2 } = candidate.package;
-    const expected = digest(crate);
-    const previous = await this.lookup(name, version2);
-    if (previous) {
-      this.checkRecord(previous, expected);
-      return { ...await this.observe(name, version2, expected), upload: "already-present-identical" };
-    }
-    let outcome = "submitted";
-    try {
-      const raw = await this.http.request("PUT", `${this.api}/api/v1/crates/new`, {
-        body: publishBody(metadata, crate),
-        token,
-        limit: 1024 * 1024
-      });
-      try {
-        const response = record(JSON.parse(utf8(raw)));
-        if (response.errors && (!Array.isArray(response.errors) || response.errors.length > 0)) outcome = "ambiguous-response-reconciled";
-      } catch {
-        outcome = "ambiguous-response-reconciled";
-      }
-    } catch (error) {
-      if (error instanceof HttpError) {
-        if ([401, 403].includes(error.status) || error.status >= 400 && error.status < 500 && ![400, 408, 409, 422, 429].includes(error.status)) throw error;
-      } else if (!(error instanceof TransportError)) throw error;
-      outcome = "ambiguous-response-reconciled";
-    }
-    return { ...await this.observe(name, version2, expected), upload: outcome };
-  }
-};
-
-// src/staging.ts
+init_common();
+init_http();
+init_registry();
 function indexEntry(metadata, crate) {
   return canonical({
     name: metadata.name,
@@ -3917,8 +4034,10 @@ async function stagingRegistry(initial = [], upstream = new Http()) {
 }
 
 // src/consumer.ts
+init_common();
 import { mkdirSync as mkdirSync5, readFileSync as readFileSync3, writeFileSync as writeFileSync4 } from "node:fs";
 import { join as join6 } from "node:path";
+init_registry();
 function checkResolution(value, name, version2) {
   const metadata = record(value), resolution = record(metadata.resolve);
   requireThat(Array.isArray(resolution.nodes) && Array.isArray(metadata.packages), "invalid Cargo resolution");
@@ -4015,6 +4134,7 @@ async function prepare(options) {
       const crate = readFileSync4(join7(work, "target", "package", `${name}-${vers}.crate`));
       const files = await archiveFiles(crate, name, vers);
       const publishMetadata = normalizedMetadata(files, name, vers);
+      if (options.plan) checkMetadataPolicy(options.plan, publishMetadata);
       const vcsBytes = files.get(".cargo_vcs_info.json");
       if (vcsBytes) {
         const git = record(record(JSON.parse(utf8(vcsBytes))).git);
@@ -4120,6 +4240,7 @@ async function loadWorkspace(root, expected, bindings = {}) {
     requireThat(pkg.name === name && typeof pkg.sha256 === "string", "workspace order differs from plan");
     const capsule = await load(join8(root, "candidates", name), pkg.sha256, { ...bindings, package: name });
     bindCandidate(plan, capsule.candidate);
+    checkMetadataPolicy(plan, JSON.parse(utf8(capsule.metadata)));
     requireThat(capsule.candidate.release_plan_sha256 === raw.plan_sha256, "candidate belongs to another release plan");
     capsules.push(capsule);
   }
@@ -4131,6 +4252,8 @@ import { appendFileSync as appendFileSync4, mkdirSync as mkdirSync8 } from "node
 import { join as join10 } from "node:path";
 
 // src/deployment.ts
+init_common();
+init_http();
 var Deployments = class {
   base;
   token;
@@ -4194,6 +4317,7 @@ function terminalState(results, production) {
 }
 
 // src/finish.ts
+init_common();
 import { appendFileSync as appendFileSync3, existsSync as existsSync3 } from "node:fs";
 import { join as join9 } from "node:path";
 function verifiedEvidence(candidate, candidateSha, observations, production) {
@@ -4283,6 +4407,10 @@ ${message}`);
 }
 
 // src/mock.ts
+init_archive();
+init_common();
+init_http();
+init_registry();
 import { createServer as createServer2 } from "node:http";
 var State = class {
   versions = /* @__PURE__ */ new Map();
@@ -4420,6 +4548,7 @@ async function rehearse(candidate, crate, metadata) {
 }
 
 // src/workspace-rehearsal.ts
+init_common();
 async function rehearseWorkspace(bundle, out, track, protocol = rehearse) {
   mkdirSync8(out, { recursive: true });
   const completed = [];
@@ -4515,6 +4644,7 @@ async function main(args = process.argv.slice(2)) {
       "tag-prefix": { type: "string", default: "v" },
       "members-json": { type: "string" },
       workspace: { type: "boolean" },
+      lockstep: { type: "boolean" },
       "smokes-json": { type: "string", default: "{}" },
       track: { type: "boolean", default: false }
     } });
@@ -4543,6 +4673,7 @@ async function main(args = process.argv.slice(2)) {
         manifest: text("manifest"),
         tagPrefix: text("tag-prefix"),
         workspace: values.workspace,
+        lockstep: values.lockstep,
         smokes,
         members: members.map((value) => {
           const pkg = record(value);

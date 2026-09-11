@@ -18,11 +18,28 @@ node dist/install.mjs \
 
 Replace `--workspace` with `--package my-crate` for one crate. Repeat `--package` to select several. Workspace mode skips `publish = false`.
 
+Add `--lockstep` when selected crates share a version. It requires exact internal
+dependency pins (`=version`) and a matching `v<version>` tag, including RC tags.
+The policy is recorded in the approved plan and rechecked against each archive.
+Tag rehearsals enforce the same version match; branch rehearsals check versions
+and pins without requiring a tag. Omit it for intentionally mixed-version workspaces.
+
 Commit the workflow and `Cargo.lock`. Make `plan` depend on your CI using `needs`. Regenerate when dependencies change. See [inputs](.github/workflows/release.yml) for options.
 
 ## Publish
 
 Each crate must exist on crates.io. Configure Trusted Publishing for your repository, `release.yml`, and the `crates.io` environment.
+
+Before approval, the planner checks **every selected crate name** in the registry.
+Missing crates stop the entire release with bootstrap instructions; registry
+errors also stop it. The publish job repeats this check before requesting a token
+and before uploading. Existence does not prove ownership or Trusted Publishing
+configuration: verify those separately.
+
+For a new crate, first publish a qualified RC with an API token, then register its
+Trusted Publisher. Choose a separate bootstrap RC version or preserve the exact
+sealed archive for retries; crates.io versions cannot be replaced with different
+bytes. Rehearsals still support unpublished crates and never need registry credentials.
 
 Create two GitHub environments:
 
@@ -52,6 +69,12 @@ keeps separate jobs for package execution and credentials.
 To publish, dispatch a tag with `publish: true`, review the plan, then **Review deployments → Approve and deploy** once.
 
 Use `v<version>` for one crate or a `v`-prefixed tag for a workspace. The commit must be reachable from `main`; dependencies outside the release must already be published.
+
+For lockstep workspaces, always use `v<shared-version>`. RC-to-final promotion is
+not automatic: changing versions or internal pins creates new archive bytes and
+requires a new plan, qualification, approval and publication. A future promotion
+command should prepare a reviewed version-change PR from a verified RC receipt;
+retagging an RC must never be treated as publishing final-version packages.
 
 ## Recovery
 

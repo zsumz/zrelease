@@ -71,6 +71,13 @@ test('provenance verification happens before registry credential exchange', () =
   assert.ok(verify >= 0 && verify < auth);
   for (const flag of ['--signer-workflow', '--signer-digest', '--source-digest', '--source-ref', '--deny-self-hosted-runners']) assert.ok(steps[verify]!.run!.includes(flag));
 });
+test('the entire approved release is preflighted before requesting registry credentials', () => {
+  const steps = jobs.publish!.steps;
+  const preflight = steps.findIndex(s => s.run?.includes('zrelease.mjs preflight'));
+  const auth = steps.findIndex(s => s.uses?.startsWith('rust-lang/crates-io-auth-action@'));
+  assert.ok(preflight >= 0 && preflight < auth);
+  assert.match(steps[preflight]!.run!, /--plan .*--plan-sha/);
+});
 test('qualification and publishing download the exact plan before using it', () => {
   for (const name of ['qualify', 'publish']) {
     const steps = jobs[name]!.steps;

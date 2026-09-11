@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import { MAX_CRATE } from './archive.ts';
-import { digest, record, ReleaseError, requireThat, utcNow, utf8 } from './common.ts';
+import { digest, NAME, record, ReleaseError, requireThat, utcNow, utf8, valid } from './common.ts';
 import { Http, HttpError, TransportError } from './http.ts';
 import type { Transport } from './http.ts';
 import type { Candidate, RegistryObservation } from './types.ts';
@@ -35,15 +35,33 @@ export class Registry {
     this.interval = options.interval ?? 5_000;
   }
   async lookup(name: string, version: string): Promise<Record<string, unknown> | null> {
+    const records = await this.entries(name);
+    if (!records) return null;
+    const matches = records.filter(r => r.vers === version);
+    requireThat(matches.length <= 1, 'registry index contains duplicate versions');
+    return matches[0] ?? null;
+  }
+  private async entries(name: string): Promise<Record<string, unknown>[] | null> {
+    valid(NAME, name, 'crate name');
     let body: Buffer;
     try { body = await this.http.request('GET', `${this.index}/${indexPath(name)}`, { limit: 16 * 1024 * 1024 }); }
     catch (error) { if (error instanceof HttpError && error.status === 404) return null; throw error; }
     let records: Record<string, unknown>[];
     try { records = utf8(body).split(/\r?\n/).filter(x => x.trim()).map(line => record(JSON.parse(line))); }
     catch { throw new ReleaseError('registry returned an invalid sparse-index entry'); }
-    const matches = records.filter(r => r.vers === version);
-    requireThat(matches.length <= 1, 'registry index contains duplicate versions');
-    return matches[0] ?? null;
+    requireThat(records.length > 0, 'registry returned an empty sparse-index entry');
+    return records;
+  }
+  async requireExisting(names: string[]): Promise<void> {
+    requireThat(names.length > 0, 'registry preflight requires selected crates');
+    const missing: string[] = [];
+    for (const name of new Set(names)) {
+      const entries = await this.entries(name);
+      if (entries === null) missing.push(name);
+      else requireThat(entries.every(entry => typeof entry.name === 'string' && entry.name.toLowerCase() === name.toLowerCase()
+        && typeof entry.vers === 'string'), `registry returned an invalid crate entry for ${name}`);
+    }
+    requireThat(missing.length === 0, `Unpublished crates require bootstrap: ${missing.join(', ')}. Publish each first version with an API token, then configure Trusted Publishing before retrying the entire release. No crates were uploaded by this preflight.`);
   }
   checkRecord(record: Record<string, unknown>, expected: string): void {
     requireThat(record.cksum === expected, 'immutable version conflict: registry checksum differs; choose a NEW version');
